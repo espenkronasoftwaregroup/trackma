@@ -19,6 +19,7 @@ type IngestRequest struct {
 }
 
 var pipeline = make(chan IngestRequest, 10000)
+var ips *[]IpRangeCountry
 
 func handleRequests() {
 
@@ -32,11 +33,9 @@ func handleRequests() {
 	if err != nil {
 		log.Fatal(err)
 	}
-
+	//https://pkg.go.dev/github.com/mostafa-asg/ip2country#section-readme check
 	for {
 		request := <-pipeline
-
-		country, err := GeoIpLookup(request.OriginIp)
 
 		if err != nil {
 			log.Errorf("Faild to do geo ip lookup: %s", err.Error())
@@ -89,6 +88,14 @@ func main() {
 	log.SetLevel(log.DebugLevel)
 	app := iris.New()
 	app.Logger().SetLevel("debug")
+
+	i, err := ReadDbIpCsv()
+
+	if err != nil {
+		log.Fatal(err.Error())
+	}
+
+	ips = i
 
 	tmpl := iris.Jet("./views", ".jet").Reload(true)
 	app.RegisterView(tmpl)
