@@ -9,6 +9,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"net/url"
 	"path/filepath"
+	"strings"
 )
 
 type IngestRequest struct {
@@ -16,7 +17,7 @@ type IngestRequest struct {
 	Path            string `json:"path"`
 	Query           string `json:"query"`
 	EventName       string `json:"eventName"`
-	GroupId         string `json:"groupId"`
+	VisitorId       string `json:"visitorId"`
 	Referrer        string `json:"referrer"`
 	ClientIp        string `json:"clientIp"`
 	ClientUserAgent string `json:"clientUserAgent"`
@@ -46,6 +47,8 @@ func handleRequests() {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	defer db.Close()
 
 	err = MigrateDb(db)
 
@@ -88,8 +91,8 @@ func handleRequests() {
 
 		country := GetCountry(request.ClientIp)
 
-		_, err = db.Exec("\ninsert into public.traffic (\"timestamp\", \"domain\", event_name, duration, user_agent, referrer, path, group_id, query_params, country) values (NOW(), $1, $2, $3, $4, $5, $6, $7, $8, $9);",
-			request.Domain, request.EventName, intToNil(request.Duration), request.ClientUserAgent, emptyStrToNil(request.Referrer), request.Path, emptyStrToNil(request.GroupId), queryJson, country)
+		_, err = db.Exec("\ninsert into public.traffic (\"timestamp\", \"domain\", event_name, duration, user_agent, referrer, path, visitor_id, query_params, country) values (NOW(), $1, $2, $3, $4, $5, $6, $7, $8, $9);",
+			strings.ToLower(strings.TrimSpace(request.Domain)), request.EventName, intToNil(request.Duration), request.ClientUserAgent, emptyStrToNil(request.Referrer), request.Path, request.VisitorId, queryJson, country)
 
 		if err != nil {
 			log.Fatalf("Failed to insert row: %s", err)
@@ -126,13 +129,36 @@ func handleIngest(ctx iris.Context) {
 		return
 	}
 
+	if ingestBody.VisitorId == "" {
+		ctx.StopWithError(400, fmt.Errorf("visitor id is required"))
+		return
+	}
+
 	pipeline <- ingestBody
 
 	ctx.StatusCode(iris.StatusOK)
 }
 
-func handleMainGet(ctx iris.Context) {
-	ctx.HTML("")
+func renderView(ctx iris.Context, name string, data map[string]interface{}) {
+	if err := ctx.View(name, data); err != nil {
+		log.WithFields(log.Fields{
+			"error": fmt.Errorf("%w", err),
+		}).Error("Failed to migrate database")
+		_, _ = ctx.HTML("<h3 class=\"error\">%s</h3>", err.Error())
+		return
+	}
+}
+
+func handleStatsRequest(ctx iris.Context) {
+
+	stats, err := GetStats("kilohearts.com", nil, nil)
+
+	if err != nil {
+		ctx.StopWithError(500, err)
+		return
+	}
+
+	ctx.JSON(stats)
 }
 
 func main() {
@@ -144,7 +170,8 @@ func main() {
 	app.RegisterView(tmpl)
 	app.HandleDir("/public", iris.Dir("./public"))
 	app.Post("/ingest", handleIngest)
-	app.Get("/", handleMainGet)
+	app.Get("/", func(ctx iris.Context) { renderView(ctx, "home", iris.Map{}) })
+	app.Get("/stats", handleStatsRequest)
 
 	go handleRequests()
 

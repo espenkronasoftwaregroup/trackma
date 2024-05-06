@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <link rel="icon" type="image/x-icon" href="/public/favicon.ico">
+    <title>Trackma</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bulma/1.0.0/css/bulma.min.css" integrity="sha512-+oEiKVGJRHutsibRYkkTIfjI0kspDtgJtkIlyPCNTCFCdhy+nSe25nvrCw7UpHPwNbdmNw9AkgGA+ptQxcjPug==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <link rel="stylesheet" href="/public/style/admin-one.min.css" />
+    <link rel="stylesheet" href="/public/style.css" />
+    <script type="text/javascript" src="/public/stats.js"></script>
+  </head>
+  <body>
+      <div class="container">
+          <div class="section hero is-link">
+              <div class="hero-body">
+                <p class="title">Trackma</p>
+                <p class="subtitle">MF site traffic shit</p>
+              </div>
+          </div>
+      </div>
+
+  </body>
+</html>

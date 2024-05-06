@@ -7,7 +7,8 @@ CREATE TABLE IF NOT EXISTS traffic
     user_agent varchar   not null,
     referrer   varchar,
     path       varchar   not null,
-    group_id   varchar,
+    visitor_id   varchar not null,
     query_params jsonb,
-    country varchar not null
+    country varchar not null,
+    event_data jsonb
 );
