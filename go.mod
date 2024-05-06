@@ -4,7 +4,11 @@ go 1.22
 
 toolchain go1.22.2
 
-require github.com/sirupsen/logrus v1.9.3
+require (
+	github.com/kataras/iris/v12 v12.2.11
+	github.com/lib/pq v1.10.9
+	github.com/sirupsen/logrus v1.9.3
+)
 
 require (
 	github.com/BurntSushi/toml v1.3.2 // indirect
@@ -24,12 +28,10 @@ require (
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/kataras/blocks v0.0.8 // indirect
 	github.com/kataras/golog v0.1.11 // indirect
-	github.com/kataras/iris/v12 v12.2.11 // indirect
 	github.com/kataras/pio v0.0.13 // indirect
 	github.com/kataras/sitemap v0.0.6 // indirect
 	github.com/kataras/tunnel v0.0.4 // indirect
 	github.com/klauspost/compress v1.17.7 // indirect
-	github.com/lib/pq v1.10.9 // indirect
 	github.com/mailgun/raymond/v2 v2.0.48 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/microcosm-cc/bluemonday v1.0.26 // indirect

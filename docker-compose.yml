@@ -6,4 +6,4 @@ services:
       POSTGRES_PASSWORD: secret
       POSTGRES_DB: traffic
     ports:
-      - "5432:5432"
+      - "5532:5432"

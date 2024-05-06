@@ -2,28 +2,47 @@ package main
 
 import (
 	"database/sql"
+	"encoding/json"
+	"fmt"
 	"github.com/kataras/iris/v12"
 	_ "github.com/lib/pq"
 	log "github.com/sirupsen/logrus"
-	"io"
+	"net/url"
+	"path/filepath"
 )
 
 type IngestRequest struct {
-	OriginIp    string
-	Path        string
-	QueryParams map[string]string
-	Body        string
-	Referrer    string
-	UserAgent   string
-	GroupId     string
+	Domain          string `json:"domain"`
+	Path            string `json:"path"`
+	Query           string `json:"query"`
+	EventName       string `json:"eventName"`
+	GroupId         string `json:"groupId"`
+	Referrer        string `json:"referrer"`
+	ClientIp        string `json:"clientIp"`
+	ClientUserAgent string `json:"clientUserAgent"`
+	Duration        int64  `json:"duration"`
 }
 
 var pipeline = make(chan IngestRequest, 10000)
-var ips *[]IpRangeCountry
+
+func emptyStrToNil(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
+}
+
+func intToNil(i int64) *int64 {
+	if i == 0 {
+		return nil
+	}
+
+	return &i
+}
 
 func handleRequests() {
 
-	db, err := sql.Open("traffic", "postgresql://<username>:<password>@<database_ip>/todos?sslmode=disable")
+	db, err := sql.Open("postgres", "postgresql://postgres:secret@localhost:5532/traffic?sslmode=disable")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -33,49 +52,81 @@ func handleRequests() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	//https://pkg.go.dev/github.com/mostafa-asg/ip2country#section-readme check
+	err = LoadIp2CountryDb(filepath.Join(Root, "dbip-country-lite.csv"))
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	for {
 		request := <-pipeline
 
+		values, err := url.ParseQuery(request.Query)
+
 		if err != nil {
-			log.Errorf("Faild to do geo ip lookup: %s", err.Error())
+			log.Error(err)
 			continue
 		}
 
-		db.Exec("INSERT INTO traffic VALUES()")
+		qv := make(map[string]string)
+		var queryJson *[]byte
+
+		if len(values) > 0 {
+			for key := range values {
+				qv[key] = values.Get(key)
+			}
+
+			qj, err := json.Marshal(qv)
+
+			if err != nil {
+				log.Errorf("Failed to serialize json: %s", err)
+				continue
+			}
+
+			queryJson = &qj
+		}
+
+		country := GetCountry(request.ClientIp)
+
+		_, err = db.Exec("\ninsert into public.traffic (\"timestamp\", \"domain\", event_name, duration, user_agent, referrer, path, group_id, query_params, country) values (NOW(), $1, $2, $3, $4, $5, $6, $7, $8, $9);",
+			request.Domain, request.EventName, intToNil(request.Duration), request.ClientUserAgent, emptyStrToNil(request.Referrer), request.Path, emptyStrToNil(request.GroupId), queryJson, country)
+
+		if err != nil {
+			log.Fatalf("Failed to insert row: %s", err)
+		}
 	}
 }
 
 func handleIngest(ctx iris.Context) {
 	if ctx.GetHeader("Content-Type") != "application/json" {
-		ctx.StatusCode(iris.StatusBadRequest)
+		ctx.StatusCode(iris.StatusUnsupportedMediaType)
 		return
 	}
 
-	body, err := io.ReadAll(ctx.Request().Body)
+	var ingestBody IngestRequest
+	err := ctx.ReadJSON(&ingestBody)
 
 	if err != nil {
-		log.Errorf("Failed to parse request json: %s", err.Error())
 		ctx.StopWithError(400, err)
 		return
 	}
 
-	clientIp := ctx.GetHeader("X-Forwarded-For")
-
-	if clientIp == "" {
-		clientIp = ctx.RemoteAddr()
+	if ingestBody.Domain == "" {
+		ctx.StopWithError(400, fmt.Errorf("domain is required"))
+		return
 	}
 
-	var request = IngestRequest{
-		Body:        string(body[:]),
-		OriginIp:    clientIp,
-		Referrer:    ctx.GetHeader("Referrer"),
-		UserAgent:   ctx.GetHeader("User-Agent"),
-		Path:        ctx.Path(),
-		QueryParams: ctx.URLParams(),
+	if ingestBody.Path == "" {
+		ctx.StopWithError(400, fmt.Errorf("path is required"))
+		return
 	}
 
-	pipeline <- request
+	if ingestBody.EventName == "" {
+		ctx.StopWithError(400, fmt.Errorf("event name is required"))
+		return
+	}
+
+	pipeline <- ingestBody
 
 	ctx.StatusCode(iris.StatusOK)
 }
@@ -89,14 +140,6 @@ func main() {
 	app := iris.New()
 	app.Logger().SetLevel("debug")
 
-	i, err := ReadDbIpCsv()
-
-	if err != nil {
-		log.Fatal(err.Error())
-	}
-
-	ips = i
-
 	tmpl := iris.Jet("./views", ".jet").Reload(true)
 	app.RegisterView(tmpl)
 	app.HandleDir("/public", iris.Dir("./public"))
@@ -105,5 +148,5 @@ func main() {
 
 	go handleRequests()
 
-	_ = app.Listen(":3000")
+	_ = app.Listen("localhost:3100")
 }
