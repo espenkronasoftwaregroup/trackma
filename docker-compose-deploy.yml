@@ -11,6 +11,6 @@ services:
   trackma:
     image: trackma
     environment:
-      CONNSTR: postgresql://postgres:secret@localhost:5532/traffic?sslmode=disable
+      CONNSTR: postgresql://postgres:secret@postgres:5432/traffic?sslmode=disable
     ports:
       - "3100:3100"
