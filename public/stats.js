@@ -24,10 +24,14 @@ class Stats {
         }
     }
 
-    updateData = () => {
-        document.getElementById("total-visitors").textContent = this.data.total_visitors;
-        document.getElementById("current-visitors").textContent = this.data.current_visitors;
-        document.getElementById("total-page-views").textContent = this.data.total_page_views;
+    updateRequestsPerHour = () => {
+        const hours = [];
+        const hits = [];
+
+        for (const [key, value] of Object.entries(this.data.requests_per_hour)) {
+            hours.push(luxon.DateTime.fromFormat(key, 'yyyy-MM-dd HH', { zone: 'utc' }).toLocal().toFormat('HH'));
+            hits.push(value);
+        }
 
         new ApexCharts(document.getElementById('requests-per-hour'), {
             chart: {
@@ -39,9 +43,55 @@ class Stats {
                 text: 'Requests per hour'
             },
             series: [{
-                data: [2, 33, 14, 8]
-            }]
+                name: 'Requests',
+                data: hits
+            }],
+            xaxis: {
+                categories: hours
+            }
         }).render();
+    }
+
+    updateRequestsPerIp = () => {
+        let sortable = Object.entries(this.data.requests_per_ip);
+        sortable.sort((a, b) => b[1] - a[1]);
+        sortable = sortable.slice(0, 10)
+
+        const data = [];
+        for (const pair of sortable) {
+            data.push({
+                x: pair[0],
+                y: pair[1]
+            })
+        }
+
+        new ApexCharts(document.getElementById('requests-per-ip'), {
+            chart: {
+                id: 'requests-per-ip',
+                type: 'bar',
+                height: '250px'
+            },
+            plotOptions: {
+                bar: {
+                    horizontal: true
+                }
+            },
+            title: {
+                text: 'Top 10 ips with most requests'
+            },
+            series: [{
+                data
+            }],
+        }).render();
+    }
+
+    updateData = () => {
+        document.getElementById("total-visitors").textContent = this.data.total_visitors;
+        document.getElementById("current-visitors").textContent = this.data.current_visitors;
+        document.getElementById("total-page-views").textContent = this.data.total_page_views;
+
+        this.updateRequestsPerHour();
+        this.updateRequestsPerIp();
     }
 }
 

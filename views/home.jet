@@ -10,6 +10,7 @@
     <script src="https://cdn.jsdelivr.net/npm/luxon@3.4.4/build/global/luxon.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
     <script type="text/javascript" src="/public/stats.js"></script>
+    <link rel="stylesheet" href="/public/bulma-switch.min.css" />
       <style>
           .border-bottom {
               border-bottom: 1px solid #d6d9e0;
@@ -57,9 +58,13 @@
                               </div>
                           </div>
                       </div>
-                      <p class="level-item"><button type="submit" class="button is-success">View</button></p>
+                      <p class="level-item"><button type="submit" class="button is-link">View</button></p>
                     </div>
                   </form>
+                  <div class="field">
+                      <input id="switchColorDefault" type="checkbox" name="switchColorDefault" class="switch" >
+                      <label for="switchColorDefault">Hours/Days</label>
+                  </div>
               </nav>
           </div>
             <div class="section">
@@ -86,6 +91,16 @@
           </div>
           <div class="section">
               <div id="requests-per-hour"></div>
+          </div>
+          <div class="section">
+              <div class="columns">
+                <div class="column">
+                   <div id="requests-per-ip"></div>
+                </div>
+                <div class="column">
+                    <div id="requests-per-path"></div>
+                </div>
+              </div>
           </div>
       </div>
   </body>

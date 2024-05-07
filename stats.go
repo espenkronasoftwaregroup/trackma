@@ -17,6 +17,7 @@ type Statistic struct {
 	TotalPageViews  int               `json:"total_page_views"`
 	TotalVisitors   int               `json:"total_visitors"`
 	RequestsPerHour *map[string]int32 `json:"requests_per_hour"`
+	RequestsPerIp   *map[string]int32 `json:"requests_per_ip"`
 }
 
 type event struct {
@@ -192,12 +193,15 @@ func getAllEvents(db *sql.DB, domain string, start *time.Time, end *time.Time) (
 		var e event
 		var queryJson sql.NullString
 		var eventJson sql.NullString
+		var ip string
 
-		err := rows.Scan(&e.Domain, &e.EventName, &e.Duration, &e.Timestamp, &e.UserAgent, &e.Referrer, &e.Path, &e.VisitorId, &queryJson, &e.Country, &eventJson, &e.StatusCode, &e.Ip)
+		err := rows.Scan(&e.Domain, &e.EventName, &e.Duration, &e.Timestamp, &e.UserAgent, &e.Referrer, &e.Path, &e.VisitorId, &queryJson, &e.Country, &eventJson, &e.StatusCode, &ip)
 
 		if err != nil {
 			return nil, err
 		}
+
+		e.Ip = net.ParseIP(ip)
 
 		if //goland:noinspection GoDfaConstantCondition
 		queryJson.Valid {
@@ -252,6 +256,25 @@ func groupEventsPerHour(events *[]event) (*map[string]int32, error) {
 	return &eventsPerHour, nil
 }
 
+func groupEventsPerIp(events *[]event) (*map[string]int32, error) {
+	eventsPerIp := make(map[string]int32)
+
+	for _, e := range *events {
+		key := e.Ip.String()
+
+		val, ok := eventsPerIp[key]
+
+		if !ok {
+			val = 1
+			eventsPerIp[key] = val
+		} else {
+			eventsPerIp[key] = val + 1
+		}
+	}
+
+	return &eventsPerIp, nil
+}
+
 func GetStats(domain string, start *time.Time, end *time.Time) (*Statistic, error) {
 	db, err := sql.Open("postgres", ConnStr)
 	if err != nil {
@@ -296,6 +319,14 @@ func GetStats(domain string, start *time.Time, end *time.Time) (*Statistic, erro
 	}
 
 	stats.RequestsPerHour = eph
+
+	epi, err := groupEventsPerIp(events)
+
+	if err != nil {
+		return nil, err
+	}
+
+	stats.RequestsPerIp = epi
 
 	return &stats, nil
 }
