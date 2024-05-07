@@ -8,6 +8,7 @@ import (
 	_ "github.com/lib/pq"
 	log "github.com/sirupsen/logrus"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strings"
 )
@@ -25,6 +26,7 @@ type IngestRequest struct {
 }
 
 var pipeline = make(chan IngestRequest, 10000)
+var ConnStr = os.Getenv("CONNSTR")
 
 func emptyStrToNil(s string) *string {
 	if s == "" {
@@ -43,7 +45,7 @@ func intToNil(i int64) *int64 {
 
 func handleRequests() {
 
-	db, err := sql.Open("postgres", "postgresql://postgres:secret@localhost:5532/traffic?sslmode=disable")
+	db, err := sql.Open("postgres", ConnStr)
 	if err != nil {
 		log.Fatal(err)
 	}

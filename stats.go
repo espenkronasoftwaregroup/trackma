@@ -133,7 +133,7 @@ func getCurrentVisitors(db *sql.DB, domain string) (int, error) {
 }
 
 func GetStats(domain string, start *time.Time, end *time.Time) (*Statistic, error) {
-	db, err := sql.Open("postgres", "postgresql://postgres:secret@localhost:5532/traffic?sslmode=disable")
+	db, err := sql.Open("postgres", ConnStr)
 	if err != nil {
 		log.Fatal(err)
 	}
