@@ -10,5 +10,9 @@ CREATE TABLE IF NOT EXISTS traffic
     visitor_id   varchar not null,
     query_params jsonb,
     country varchar not null,
-    event_data jsonb
+    event_data jsonb,
+    status_code int not null,
+    ip inet not null
 );
+
+

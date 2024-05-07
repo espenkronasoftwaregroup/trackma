@@ -7,8 +7,14 @@
     <link rel="icon" type="image/x-icon" href="/public/favicon.ico">
     <title>Trackma</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bulma/1.0.0/css/bulma.min.css" integrity="sha512-+oEiKVGJRHutsibRYkkTIfjI0kspDtgJtkIlyPCNTCFCdhy+nSe25nvrCw7UpHPwNbdmNw9AkgGA+ptQxcjPug==" crossorigin="anonymous" referrerpolicy="no-referrer" />
-    <link rel="stylesheet" href="/public/style.css" />
+    <script src="https://cdn.jsdelivr.net/npm/luxon@3.4.4/build/global/luxon.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
     <script type="text/javascript" src="/public/stats.js"></script>
+      <style>
+          .border-bottom {
+              border-bottom: 1px solid #d6d9e0;
+          }
+      </style>
   </head>
   <body>
       <div class="container">
@@ -18,7 +24,45 @@
                 <p class="subtitle">MF site traffic shit</p>
               </div>
           </div>
-          <div class="section">
+          <div class="section border-bottom">
+              <nav class="level">
+                  <!-- Left side -->
+                  <form method="get">
+                  <div class="level-left">
+                      <div class="level-item">
+                          <div class="field is-horizontal">
+                              <div class="field-label is-normal">
+                                  <label class="label">From</label>
+                              </div>
+                              <div class="field-body">
+                                  <div class="field">
+                                      <p class="control">
+                                          <input class="input" name="start" id="start-date" type="date" value="{{ .StartDate }}" />
+                                      </p>
+                                  </div>
+                              </div>
+                          </div>
+                      </div>
+                      <div class="level-item">
+                          <div class="field is-horizontal">
+                              <div class="field-label is-normal">
+                                  <label class="label">To</label>
+                              </div>
+                              <div class="field-body">
+                                  <div class="field">
+                                      <p class="control">
+                                          <input class="input" name="end" id="end-date" type="date" value="{{ .EndDate }}" max="{{ .EndDate }}" />
+                                      </p>
+                                  </div>
+                              </div>
+                          </div>
+                      </div>
+                      <p class="level-item"><button type="submit" class="button is-success">View</button></p>
+                    </div>
+                  </form>
+              </nav>
+          </div>
+            <div class="section">
               <nav class="level">
                   <div class="level-item has-text-centered">
                       <div>
@@ -40,7 +84,9 @@
                   </div>
               </nav>
           </div>
+          <div class="section">
+              <div id="requests-per-hour"></div>
+          </div>
       </div>
-
   </body>
 </html>

@@ -1,13 +1,24 @@
-FROM golang:1.22-alpine
+FROM golang:1.22-alpine AS BuildStage
 
-WORKDIR /app
+WORKDIR /
 
 COPY go.mod ./
+COPY go.sum ./
 RUN go mod download
 
-COPY . .
+COPY *.go ./
 
 RUN go build -o /trackma
+
+FROM alpine:latest
+
+WORKDIR /
+
+COPY --from=BuildStage /trackma /trackma
+COPY ./migrations/ ./migrations/
+COPY ./public/ ./public/
+COPY ./views/ ./views/
+COPY ./dbip-country-lite.csv ./
 
 EXPOSE 3100
 

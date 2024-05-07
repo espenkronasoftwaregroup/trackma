@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 type IngestRequest struct {
@@ -23,6 +24,7 @@ type IngestRequest struct {
 	ClientIp        string `json:"clientIp"`
 	ClientUserAgent string `json:"clientUserAgent"`
 	Duration        int64  `json:"duration"`
+	StatusCode      int16  `json:"statusCode"`
 }
 
 var pipeline = make(chan IngestRequest, 10000)
@@ -93,11 +95,11 @@ func handleRequests() {
 
 		country := GetCountry(request.ClientIp)
 
-		_, err = db.Exec("\ninsert into public.traffic (\"timestamp\", \"domain\", event_name, duration, user_agent, referrer, path, visitor_id, query_params, country) values (NOW(), $1, $2, $3, $4, $5, $6, $7, $8, $9);",
-			strings.ToLower(strings.TrimSpace(request.Domain)), request.EventName, intToNil(request.Duration), request.ClientUserAgent, emptyStrToNil(request.Referrer), request.Path, request.VisitorId, queryJson, country)
+		_, err = db.Exec("\ninsert into public.traffic (\"timestamp\", \"domain\", event_name, duration, user_agent, referrer, path, visitor_id, query_params, country, status_code, ip) values (NOW(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11);",
+			strings.ToLower(strings.TrimSpace(request.Domain)), request.EventName, intToNil(request.Duration), request.ClientUserAgent, emptyStrToNil(request.Referrer), request.Path, request.VisitorId, queryJson, country, request.StatusCode, request.ClientIp)
 
 		if err != nil {
-			log.Fatalf("Failed to insert row: %s", err)
+			log.Errorf("Failed to insert row: %s", err)
 		}
 	}
 }
@@ -153,7 +155,39 @@ func renderView(ctx iris.Context, name string, data map[string]interface{}) {
 
 func handleStatsRequest(ctx iris.Context) {
 
-	stats, err := GetStats("kilohearts.com", nil, nil)
+	var start *time.Time
+	var end *time.Time
+
+	if ctx.URLParamExists("start") {
+		t, err := time.Parse("2006-01-02", ctx.URLParam("start"))
+
+		if err != nil {
+			ctx.StopWithError(400, err)
+			return
+		}
+
+		start = &t
+	}
+
+	if ctx.URLParamExists("end") {
+		t, err := time.Parse("2006-01-02", ctx.URLParam("end"))
+
+		if err != nil {
+			ctx.StopWithError(400, err)
+			return
+		}
+
+		end = &t
+	}
+
+	if start != nil && end != nil {
+		if end.Before(*start) {
+			ctx.StopWithError(400, fmt.Errorf("start time must be before end time"))
+			return
+		}
+	}
+
+	stats, err := GetStats("kilohearts.com", start, end)
 
 	if err != nil {
 		ctx.StopWithError(500, err)
@@ -172,10 +206,15 @@ func main() {
 	app.RegisterView(tmpl)
 	app.HandleDir("/public", iris.Dir("./public"))
 	app.Post("/ingest", handleIngest)
-	app.Get("/", func(ctx iris.Context) { renderView(ctx, "home", iris.Map{}) })
+	app.Get("/", func(ctx iris.Context) {
+		renderView(ctx, "home", iris.Map{
+			"StartDate": time.Now().Add(time.Hour * -24).Format("2006-01-02"),
+			"EndDate":   time.Now().Format("2006-01-02"),
+		})
+	})
 	app.Get("/stats", handleStatsRequest)
 
 	go handleRequests()
 
-	_ = app.Listen("localhost:3100")
+	_ = app.Listen(":3100")
 }
