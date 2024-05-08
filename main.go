@@ -1,10 +1,12 @@
 package main
 
 import (
+	"crypto/sha256"
 	"database/sql"
 	"encoding/json"
 	"fmt"
 	"github.com/kataras/iris/v12"
+	"github.com/lib/pq"
 	_ "github.com/lib/pq"
 	log "github.com/sirupsen/logrus"
 	"net/url"
@@ -15,16 +17,16 @@ import (
 )
 
 type IngestRequest struct {
-	Domain          string `json:"domain"`
-	Path            string `json:"path"`
-	Query           string `json:"query"`
-	EventName       string `json:"eventName"`
-	VisitorId       string `json:"visitorId"`
-	Referrer        string `json:"referrer"`
-	ClientIp        string `json:"clientIp"`
-	ClientUserAgent string `json:"clientUserAgent"`
-	Duration        int64  `json:"duration"`
-	StatusCode      int16  `json:"statusCode"`
+	Domain          string   `json:"domain"`
+	Path            string   `json:"path"`
+	Query           string   `json:"query"`
+	EventName       string   `json:"eventName"`
+	VisitorId       string   `json:"visitorId"`
+	Referrer        string   `json:"referrer"`
+	ClientIp        []string `json:"clientIp"`
+	ClientUserAgent string   `json:"clientUserAgent"`
+	Duration        int64    `json:"duration"`
+	StatusCode      int16    `json:"statusCode"`
 }
 
 var pipeline = make(chan IngestRequest, 10000)
@@ -93,13 +95,28 @@ func handleRequests() {
 			queryJson = &qj
 		}
 
-		country := GetCountry(request.ClientIp)
+		country := GetCountry(request.ClientIp[0])
 
-		_, err = db.Exec("\ninsert into public.traffic (\"timestamp\", \"domain\", event_name, duration, user_agent, referrer, path, visitor_id, query_params, country, status_code, ip) values (NOW(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11);",
-			strings.ToLower(strings.TrimSpace(request.Domain)), request.EventName, intToNil(request.Duration), request.ClientUserAgent, emptyStrToNil(request.Referrer), request.Path, request.VisitorId, queryJson, country, request.StatusCode, request.ClientIp)
+		if len(request.VisitorId) == 0 {
+			h := sha256.New()
+			h.Write([]byte(request.ClientIp[0] + request.ClientUserAgent))
+			request.VisitorId = string(h.Sum(nil)[:])
+		}
+
+		// insert to events
+		_, err = db.Exec("insert into public.events (\"timestamp\", \"domain\", event_name, duration, user_agent, referrer, path, visitor_id, query_params, country, status_code) values (NOW(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10);",
+			strings.ToLower(strings.TrimSpace(request.Domain)), request.EventName, intToNil(request.Duration), request.ClientUserAgent, emptyStrToNil(request.Referrer), request.Path, request.VisitorId, queryJson, country, request.StatusCode)
 
 		if err != nil {
-			log.Errorf("Failed to insert row: %s", err)
+			log.Errorf("Failed to insert event row: %s", err)
+		}
+
+		// insert into monthly traffic
+		_, err = db.Exec("insert into public.monthly_traffic (timestamp, domain, duration, user_agent, referrer, path, query_params, country, status_code, ip, ips) values (NOW(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
+			strings.ToLower(strings.TrimSpace(request.Domain)), intToNil(request.Duration), request.ClientUserAgent, emptyStrToNil(request.Referrer), request.Path, queryJson, country, request.StatusCode, request.ClientIp[0], pq.Array(request.ClientIp[1:]))
+
+		if err != nil {
+			log.Errorf("Failed to insert traffic row: %s", err)
 		}
 	}
 }
@@ -118,23 +135,23 @@ func handleIngest(ctx iris.Context) {
 		return
 	}
 
+	if len(ingestBody.ClientIp) == 0 {
+		ctx.StopWithError(iris.StatusBadRequest, fmt.Errorf("client ip is required"))
+		return
+	}
+
 	if ingestBody.Domain == "" {
-		ctx.StopWithError(400, fmt.Errorf("domain is required"))
+		ctx.StopWithError(iris.StatusBadRequest, fmt.Errorf("domain is required"))
 		return
 	}
 
 	if ingestBody.Path == "" {
-		ctx.StopWithError(400, fmt.Errorf("path is required"))
+		ctx.StopWithError(iris.StatusBadRequest, fmt.Errorf("path is required"))
 		return
 	}
 
 	if ingestBody.EventName == "" {
-		ctx.StopWithError(400, fmt.Errorf("event name is required"))
-		return
-	}
-
-	if ingestBody.VisitorId == "" {
-		ctx.StopWithError(400, fmt.Errorf("visitor id is required"))
+		ctx.StopWithError(iris.StatusBadRequest, fmt.Errorf("event name is required"))
 		return
 	}
 
