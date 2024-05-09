@@ -4,22 +4,22 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"github.com/lib/pq"
 	log "github.com/sirupsen/logrus"
 	"net"
 	"time"
 )
 
 type Statistic struct {
-	Domain           string            `json:"domain"`
-	StartTime        *time.Time        `json:"start_time"`
-	EndTime          *time.Time        `json:"end_time"`
-	CurrentVisitors  int               `json:"current_visitors"`
-	TotalPageViews   int               `json:"total_page_views"`
-	TotalVisitors    int               `json:"total_visitors"`
-	EventsPerHour    *map[string]int32 `json:"events_per_hour"`
-	EventsPerVisitor *map[string]int32 `json:"events_per_visitor"`
-	EventsPerPath    *map[string]int32 `json:"events_per_path"`
-	Requests         *[]request        `json:"requests"`
+	Domain             string            `json:"domain"`
+	StartTime          *time.Time        `json:"start_time"`
+	EndTime            *time.Time        `json:"end_time"`
+	CurrentVisitors    int               `json:"current_visitors"`
+	TotalPageViews     int               `json:"total_page_views"`
+	TotalVisitors      int               `json:"total_visitors"`
+	EventsPerHour      *map[string]int32 `json:"events_per_hour"`
+	VisitorsPerCountry *map[string]int32 `json:"visitors_per_country"`
+	RequestsPerIp      *[]requestsPerIp  `json:"requests_per_ip"`
 }
 
 type event struct {
@@ -51,7 +51,14 @@ type request struct {
 	Ips         *[]net.IP
 }
 
-func getTotalVisits(db *sql.DB, domain string, start *time.Time, end *time.Time) (int, error) {
+type requestsPerIp struct {
+	Ip      net.IP    `json:"ip"`
+	Ips     *[]net.IP `json:"ips"`
+	Country string    `json:"country"`
+	Count   int32     `json:"count"`
+}
+
+func getTotalPageViews(db *sql.DB, domain string, start *time.Time, end *time.Time) (int, error) {
 	var query = "SELECT COUNT(*) AS c FROM public.events WHERE event_name = 'pageview' AND domain = $1"
 
 	if start != nil {
@@ -80,7 +87,7 @@ func getTotalVisits(db *sql.DB, domain string, start *time.Time, end *time.Time)
 	}
 
 	if err != nil {
-		log.WithFields(log.Fields{"error": fmt.Errorf("%w", err)}).Error("Failed to query for total visits")
+		log.WithFields(log.Fields{"error": fmt.Errorf("%w", err)}).Error("Failed to query for total page views")
 		return 0, err
 	}
 
@@ -90,14 +97,14 @@ func getTotalVisits(db *sql.DB, domain string, start *time.Time, end *time.Time)
 	err = rows.Scan(&result)
 
 	if err != nil {
-		log.WithFields(log.Fields{"error": fmt.Errorf("%w", err)}).Error("Failed to scan rows")
+		log.WithFields(log.Fields{"error": fmt.Errorf("%w", err)}).Error("Failed to scan page view rows")
 		return 0, err
 	}
 
 	return result, nil
 }
 
-func getVisitors(db *sql.DB, domain string, start *time.Time, end *time.Time) (int, error) {
+func getTotalVisitors(db *sql.DB, domain string, start *time.Time, end *time.Time) (int, error) {
 	var query = "SELECT COUNT(DISTINCT visitor_id) AS c FROM public.events WHERE domain = $1"
 
 	if start != nil {
@@ -292,11 +299,13 @@ func getRequests(db *sql.DB, domain string, start *time.Time, end *time.Time) (*
 		var ip string
 		ips := make([]string, 10)
 
-		err := rows.Scan(&e.Domain, &e.Duration, &e.Timestamp, &e.UserAgent, &e.Referrer, &e.Path, &queryJson, &e.Country, &e.StatusCode, ip, &ips)
+		err := rows.Scan(&e.Domain, &e.Duration, &e.Timestamp, &e.UserAgent, &e.Referrer, &e.Path, &queryJson, &e.Country, &e.StatusCode, &ip, pq.Array(&ips))
 
 		if err != nil {
 			return nil, err
 		}
+
+		e.Ip = net.ParseIP(ip)
 
 		if //goland:noinspection GoDfaConstantCondition
 		queryJson.Valid {
@@ -337,42 +346,68 @@ func groupEventsPerHour(events *[]event) (*map[string]int32, error) {
 	return &eventsPerHour, nil
 }
 
-func groupEventsPerVisitor(events *[]event) (*map[string]int32, error) {
-	eventsPerVisitor := make(map[string]int32)
-
-	for _, e := range *events {
-		key := e.VisitorId
-
-		val, ok := eventsPerVisitor[key]
-
-		if !ok {
-			val = 1
-			eventsPerVisitor[key] = val
-		} else {
-			eventsPerVisitor[key] = val + 1
+func stringInSlice(a string, list []string) bool {
+	for _, b := range list {
+		if b == a {
+			return true
 		}
 	}
-
-	return &eventsPerVisitor, nil
+	return false
 }
 
-func groupEventsPerPath(events *[]event) (*map[string]int32, error) {
-	eventsPerPath := make(map[string]int32)
+func groupVisitorByCountry(events *[]event) (*map[string]int32, error) {
+	eventsPerCountry := make(map[string]int32)
+	visitorIds := make([]string, 0)
 
 	for _, e := range *events {
-		key := e.Path
+		if stringInSlice(e.VisitorId, visitorIds) {
+			continue
+		}
 
-		val, ok := eventsPerPath[key]
+		key := e.Country
+
+		_, ok := eventsPerCountry[key]
 
 		if !ok {
-			val = 1
-			eventsPerPath[key] = val
+			eventsPerCountry[key] = 1
 		} else {
-			eventsPerPath[key] = val + 1
+			eventsPerCountry[key] += 1
+		}
+
+		visitorIds = append(visitorIds, e.VisitorId)
+	}
+
+	return &eventsPerCountry, nil
+}
+
+func groupRequestsPerIp(requests *[]request) (*[]requestsPerIp, error) {
+	eventsPerPath := make(map[string]*requestsPerIp)
+
+	for _, e := range *requests {
+		key := e.Ip.String()
+
+		_, ok := eventsPerPath[key]
+
+		if !ok {
+			x := requestsPerIp{
+				Count:   1,
+				Ip:      e.Ip,
+				Ips:     e.Ips,
+				Country: e.Country,
+			}
+			eventsPerPath[key] = &x
+		} else {
+			eventsPerPath[key].Count += 1
 		}
 	}
 
-	return &eventsPerPath, nil
+	result := make([]requestsPerIp, 0)
+
+	for _, v := range eventsPerPath {
+		result = append(result, *v)
+	}
+
+	return &result, nil
 }
 
 func GetStats(domain string, start *time.Time, end *time.Time) (*Statistic, error) {
@@ -388,13 +423,13 @@ func GetStats(domain string, start *time.Time, end *time.Time) (*Statistic, erro
 	stats.StartTime = start
 	stats.EndTime = end
 
-	visits, err := getTotalVisits(db, domain, start, end)
+	visits, err := getTotalPageViews(db, domain, start, end)
 	if err != nil {
 		return nil, err
 	}
 	stats.TotalPageViews = visits
 
-	visitors, err := getVisitors(db, domain, start, end)
+	visitors, err := getTotalVisitors(db, domain, start, end)
 	if err != nil {
 		return nil, err
 	}
@@ -421,23 +456,14 @@ func GetStats(domain string, start *time.Time, end *time.Time) (*Statistic, erro
 
 	stats.EventsPerHour = eph
 
-	// events per ip
-	epi, err := groupEventsPerVisitor(events)
+	// events per country
+	epi, err := groupVisitorByCountry(events)
 
 	if err != nil {
 		return nil, err
 	}
 
-	stats.EventsPerVisitor = epi
-
-	// events per path
-	epp, err := groupEventsPerPath(events)
-
-	if err != nil {
-		return nil, err
-	}
-
-	stats.EventsPerPath = epp
+	stats.VisitorsPerCountry = epi
 
 	// requests
 	req, err := getRequests(db, domain, start, end)
@@ -446,7 +472,13 @@ func GetStats(domain string, start *time.Time, end *time.Time) (*Statistic, erro
 		return nil, err
 	}
 
-	stats.Requests = req
+	rpi, err := groupRequestsPerIp(req)
+
+	if err != nil {
+		return nil, err
+	}
+
+	stats.RequestsPerIp = rpi
 
 	return &stats, nil
 }

@@ -90,7 +90,7 @@
               </nav>
           </div>
           <div class="section">
-              <div id="requests-per-hour"></div>
+              <div id="pageviews-per-hour"></div>
           </div>
           <div class="section">
               <div class="columns">
@@ -98,7 +98,7 @@
                    <div id="requests-per-ip"></div>
                 </div>
                 <div class="column">
-                    <div id="requests-per-path"></div>
+                    <div id="visitors-per-country"></div>
                 </div>
               </div>
           </div>

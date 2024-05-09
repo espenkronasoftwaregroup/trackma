@@ -1,4 +1,12 @@
 
+function getFlagEmoji(countryCode) {
+    const codePoints = countryCode
+        .toUpperCase()
+        .split('')
+        .map(char =>  127397 + char.charCodeAt());
+    return String.fromCodePoint(...codePoints);
+}
+
 class Stats {
     constructor() {
         this.data = null;
@@ -28,22 +36,22 @@ class Stats {
         const hours = [];
         const hits = [];
 
-        for (const [key, value] of Object.entries(this.data.requests_per_hour)) {
+        for (const [key, value] of Object.entries(this.data.events_per_hour)) {
             hours.push(luxon.DateTime.fromFormat(key, 'yyyy-MM-dd HH', { zone: 'utc' }).toLocal().toFormat('HH'));
             hits.push(value);
         }
 
-        new ApexCharts(document.getElementById('requests-per-hour'), {
+        new ApexCharts(document.getElementById('pageviews-per-hour'), {
             chart: {
                 id: 'mychart',
                 type: 'line',
                 height: '400px'
             },
             title: {
-                text: 'Requests per hour'
+                text: 'Page views per hour'
             },
             series: [{
-                name: 'Requests',
+                name: 'Views',
                 data: hits
             }],
             xaxis: {
@@ -53,15 +61,15 @@ class Stats {
     }
 
     updateRequestsPerIp = () => {
-        let sortable = Object.entries(this.data.requests_per_ip);
-        sortable.sort((a, b) => b[1] - a[1]);
+        let sortable = [...this.data.requests_per_ip];
+        sortable.sort((a, b) => b.count - a.count);
         sortable = sortable.slice(0, 10)
 
         const data = [];
         for (const pair of sortable) {
             data.push({
-                x: pair[0],
-                y: pair[1]
+                x: `${pair.ip} - ${getFlagEmoji(pair.country)}`,
+                y: pair.count
             })
         }
 
@@ -77,7 +85,41 @@ class Stats {
                 }
             },
             title: {
-                text: 'Top 10 ips with most requests'
+                text: 'Top 10 IPs with most requests'
+            },
+            series: [{
+                data
+            }],
+        }).render();
+    }
+
+    updateVisitorsPerCountry = () => {
+        let sortable = Object.entries(this.data.visitors_per_country)
+        sortable.sort((a, b) => b[1] - a[1]);
+        sortable = sortable.slice(0, 10)
+        const regionNames = new Intl.DisplayNames(['en'], {type: 'region'});
+
+        const data = [];
+        for (const pair of sortable) {
+            data.push({
+                x: `${regionNames.of(pair[0])} - ${getFlagEmoji(pair[0])}`,
+                y: pair[1]
+            })
+        }
+
+        new ApexCharts(document.getElementById('visitors-per-country'), {
+            chart: {
+                id: 'visitors-per-country',
+                type: 'bar',
+                height: '250px'
+            },
+            plotOptions: {
+                bar: {
+                    horizontal: true
+                }
+            },
+            title: {
+                text: 'Top 10 countries with most visitors'
             },
             series: [{
                 data
@@ -92,6 +134,7 @@ class Stats {
 
         this.updateRequestsPerHour();
         this.updateRequestsPerIp();
+        this.updateVisitorsPerCountry();
     }
 }
 

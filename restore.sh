@@ -1,0 +1,1 @@
+cat "$1" | docker exec -i $(docker compose ps -q postgres) psql -U postgres traffic
