@@ -7,6 +7,7 @@ import (
 	"github.com/lib/pq"
 	log "github.com/sirupsen/logrus"
 	"net"
+	"net/url"
 	"time"
 )
 
@@ -408,6 +409,32 @@ func groupRequestsPerIp(requests *[]request) (*[]requestsPerIp, error) {
 	}
 
 	return &result, nil
+}
+
+func groupEventsByReferrer(events *[]event) (*map[string]int32, error) {
+	eventsPerReferrer := make(map[string]int32)
+
+	for _, e := range *events {
+		var key string = ""
+
+		if len(*e.Referrer) > 0 {
+			key = url.Parse(e.Referrer
+		} else {
+
+		}
+
+
+		val, ok := eventsPerReferrer[key]
+
+		if !ok {
+			val = 1
+			eventsPerReferrer[key] = val
+		} else {
+			eventsPerReferrer[key] = val + 1
+		}
+	}
+
+	return &eventsPerReferrer, nil
 }
 
 func GetStats(domain string, start *time.Time, end *time.Time) (*Statistic, error) {
