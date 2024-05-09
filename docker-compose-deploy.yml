@@ -1,3 +1,6 @@
+volumes:
+  db
+
 services:
   postgres:
     image: postgres:16
@@ -7,6 +10,8 @@ services:
       POSTGRES_DB: traffic
     ports:
       - "5432:5432"
+    volumes:
+      - db:/var/lib/postgresql/data
 
   trackma:
     image: trackma
