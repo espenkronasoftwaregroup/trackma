@@ -42,12 +42,12 @@ func GetCountry(ip string) string {
 
 	ipNumb, err := ipToInt(ip)
 	if err != nil {
-		return ""
+		return "ZZ"
 	}
 
 	index := binarySearch(arr, ipNumb, 0, len(arr)-1)
 	if index == -1 {
-		return ""
+		return "ZZ"
 	}
 
 	return arr[index].country

@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"database/sql/driver"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"github.com/kataras/iris/v12"
@@ -101,7 +102,7 @@ func handleRequests() {
 		if len(request.VisitorId) == 0 {
 			h := sha256.New()
 			h.Write([]byte(request.ClientIp[0] + request.ClientUserAgent))
-			request.VisitorId = string(h.Sum(nil)[:])
+			request.VisitorId = base64.StdEncoding.EncodeToString(h.Sum(nil))
 		}
 
 		// insert to events
