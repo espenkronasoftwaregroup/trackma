@@ -9,12 +9,14 @@ function getFlagEmoji(countryCode) {
 
 class Stats {
     constructor() {
+        this.numberFormatter = new Intl.NumberFormat('sv-SE');
         this.data = null;
 
         const url = new URL(document.location).searchParams;
         const d = luxon.DateTime.now();
         this.start = url.get('start') ?? d.minus({ days: 1}).toString().substring(0, 10);
         this.end = url.get('end') ?? d.toString().substring(0, 10);
+        this.barChartHeight = '300px';
     }
 
     fetchStats = async () => {
@@ -77,7 +79,7 @@ class Stats {
             chart: {
                 id: 'requests-per-ip',
                 type: 'bar',
-                height: '250px'
+                height: this.barChartHeight
             },
             plotOptions: {
                 bar: {
@@ -86,6 +88,39 @@ class Stats {
             },
             title: {
                 text: 'Top 10 IPs with most requests'
+            },
+            series: [{
+                data
+            }],
+        }).render();
+    }
+
+    updateReferrers = () => {
+        let sortable = Object.entries(this.data.referrers)
+        sortable.sort((a, b) => b[1] - a[1]);
+        sortable = sortable.slice(0, 10)
+
+        const data = [];
+        for (const pair of sortable) {
+            data.push({
+                x: pair[0],
+                y: pair[1]
+            })
+        }
+
+        new ApexCharts(document.getElementById('referrers'), {
+            chart: {
+                id: 'referrers',
+                type: 'bar',
+                height: this.barChartHeight
+            },
+            plotOptions: {
+                bar: {
+                    horizontal: true
+                }
+            },
+            title: {
+                text: 'Top 10 referral sites'
             },
             series: [{
                 data
@@ -111,7 +146,7 @@ class Stats {
             chart: {
                 id: 'visitors-per-country',
                 type: 'bar',
-                height: '250px'
+                height: this.barChartHeight
             },
             plotOptions: {
                 bar: {
@@ -127,14 +162,52 @@ class Stats {
         }).render();
     }
 
+    updateVisitorsPerUtmSource = () => {
+        let sortable = Object.entries(this.data.visitors_per_utm_source)
+        sortable.sort((a, b) => b[1] - a[1]);
+        sortable = sortable.slice(0, 10)
+
+        const data = [];
+        for (const pair of sortable) {
+            data.push({
+                x: pair[0],
+                y: pair[1]
+            })
+        }
+
+        new ApexCharts(document.getElementById('visitors-per-utm-source'), {
+            chart: {
+                id: 'visitors-per-utm-source',
+                type: 'bar',
+                height: this.barChartHeight
+            },
+            plotOptions: {
+                bar: {
+                    horizontal: true
+                }
+            },
+            title: {
+                text: 'Top 10 utm sources'
+            },
+            series: [{
+                data
+            }],
+        }).render();
+    }
+
     updateData = () => {
-        document.getElementById("total-visitors").textContent = this.data.total_visitors;
-        document.getElementById("current-visitors").textContent = this.data.current_visitors;
-        document.getElementById("total-page-views").textContent = this.data.total_page_views;
+        document.getElementById("total-visitors").textContent = this.numberFormatter.format(this.data.total_visitors);
+        document.getElementById("current-visitors").textContent = this.numberFormatter.format(this.data.current_visitors);
+        document.getElementById("total-page-views").textContent = this.numberFormatter.format(this.data.total_page_views);
 
         this.updateRequestsPerHour();
         this.updateRequestsPerIp();
         this.updateVisitorsPerCountry();
+        this.updateReferrers();
+        this.updateVisitorsPerUtmSource();
+
+        document.getElementById('spinner').classList.add('hidden');
+        document.getElementById('hider').classList.remove('hidden');
     }
 }
 

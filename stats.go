@@ -12,15 +12,17 @@ import (
 )
 
 type Statistic struct {
-	Domain             string            `json:"domain"`
-	StartTime          *time.Time        `json:"start_time"`
-	EndTime            *time.Time        `json:"end_time"`
-	CurrentVisitors    int               `json:"current_visitors"`
-	TotalPageViews     int               `json:"total_page_views"`
-	TotalVisitors      int               `json:"total_visitors"`
-	EventsPerHour      *map[string]int32 `json:"events_per_hour"`
-	VisitorsPerCountry *map[string]int32 `json:"visitors_per_country"`
-	RequestsPerIp      *[]requestsPerIp  `json:"requests_per_ip"`
+	Domain               string            `json:"domain"`
+	StartTime            *time.Time        `json:"start_time"`
+	EndTime              *time.Time        `json:"end_time"`
+	CurrentVisitors      int               `json:"current_visitors"`
+	TotalPageViews       int               `json:"total_page_views"`
+	TotalVisitors        int               `json:"total_visitors"`
+	EventsPerHour        *map[string]int32 `json:"events_per_hour"`
+	VisitorsPerCountry   *map[string]int32 `json:"visitors_per_country"`
+	RequestsPerIp        *[]requestsPerIp  `json:"requests_per_ip"`
+	Referrers            *map[string]int32 `json:"referrers"`
+	VisitorsPerUtmSource *map[string]int32 `json:"visitors_per_utm_source"`
 }
 
 type event struct {
@@ -216,11 +218,18 @@ func getAllEvents(db *sql.DB, domain string, start *time.Time, end *time.Time) (
 		var e event
 		var queryJson sql.NullString
 		var eventJson sql.NullString
+		var duration sql.NullInt64
 
-		err := rows.Scan(&e.Domain, &e.EventName, &e.Duration, &e.Timestamp, &e.UserAgent, &e.Referrer, &e.Path, &e.VisitorId, &queryJson, &e.Country, &eventJson, &e.StatusCode)
+		err := rows.Scan(&e.Domain, &e.EventName, &duration, &e.Timestamp, &e.UserAgent, &e.Referrer, &e.Path, &e.VisitorId, &queryJson, &e.Country, &eventJson, &e.StatusCode)
 
 		if err != nil {
 			return nil, err
+		}
+
+		if duration.Valid {
+			e.Duration = duration.Int64
+		} else {
+			e.Duration = 0
 		}
 
 		if //goland:noinspection GoDfaConstantCondition
@@ -297,16 +306,23 @@ func getRequests(db *sql.DB, domain string, start *time.Time, end *time.Time) (*
 	for rows.Next() {
 		var e request
 		var queryJson sql.NullString
+		var duration sql.NullInt64
 		var ip string
 		ips := make([]string, 10)
 
-		err := rows.Scan(&e.Domain, &e.Duration, &e.Timestamp, &e.UserAgent, &e.Referrer, &e.Path, &queryJson, &e.Country, &e.StatusCode, &ip, pq.Array(&ips))
+		err := rows.Scan(&e.Domain, &duration, &e.Timestamp, &e.UserAgent, &e.Referrer, &e.Path, &queryJson, &e.Country, &e.StatusCode, &ip, pq.Array(&ips))
 
 		if err != nil {
 			return nil, err
 		}
 
 		e.Ip = net.ParseIP(ip)
+
+		if duration.Valid {
+			e.Duration = duration.Int64
+		} else {
+			e.Duration = 0
+		}
 
 		if //goland:noinspection GoDfaConstantCondition
 		queryJson.Valid {
@@ -411,18 +427,27 @@ func groupRequestsPerIp(requests *[]request) (*[]requestsPerIp, error) {
 	return &result, nil
 }
 
-func groupEventsByReferrer(events *[]event) (*map[string]int32, error) {
+func groupEventsByReferrer(events *[]event, domain string) (*map[string]int32, error) {
 	eventsPerReferrer := make(map[string]int32)
 
+	// todo: maybe also take visitor id into account here
 	for _, e := range *events {
 		var key string = ""
 
-		if len(*e.Referrer) > 0 {
-			key = url.Parse(e.Referrer
+		if e.Referrer != nil && len(*e.Referrer) > 0 {
+			u, err := url.Parse(*e.Referrer)
+			if err != nil {
+				continue
+			}
+
+			if u.Host == domain {
+				continue
+			}
+
+			key = u.Host
 		} else {
-
+			continue
 		}
-
 
 		val, ok := eventsPerReferrer[key]
 
@@ -435,6 +460,39 @@ func groupEventsByReferrer(events *[]event) (*map[string]int32, error) {
 	}
 
 	return &eventsPerReferrer, nil
+}
+
+func visitorsByUtmSource(events *[]event) (*map[string]int32, error) {
+	visitorsByUtmSource := make(map[string]int32)
+	visitorIds := make([]string, 0)
+
+	for _, e := range *events {
+		if stringInSlice(e.VisitorId, visitorIds) {
+			continue
+		}
+
+		if e.QueryParams == nil {
+			continue
+		}
+
+		key, ok := (*e.QueryParams)["utm_source"].(string)
+
+		if !ok {
+			continue
+		}
+
+		_, ok = visitorsByUtmSource[key]
+
+		if !ok {
+			visitorsByUtmSource[key] = 1
+		} else {
+			visitorsByUtmSource[key] += 1
+		}
+
+		visitorIds = append(visitorIds, e.VisitorId)
+	}
+
+	return &visitorsByUtmSource, nil
 }
 
 func GetStats(domain string, start *time.Time, end *time.Time) (*Statistic, error) {
@@ -491,6 +549,24 @@ func GetStats(domain string, start *time.Time, end *time.Time) (*Statistic, erro
 	}
 
 	stats.VisitorsPerCountry = epi
+
+	// referrers
+	ebr, err := groupEventsByReferrer(events, domain)
+
+	if err != nil {
+		return nil, err
+	}
+
+	stats.Referrers = ebr
+
+	// utm sources
+	vbu, err := visitorsByUtmSource(events)
+
+	if err != nil {
+		return nil, err
+	}
+
+	stats.VisitorsPerUtmSource = vbu
 
 	// requests
 	req, err := getRequests(db, domain, start, end)

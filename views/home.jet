@@ -15,6 +15,54 @@
           .border-bottom {
               border-bottom: 1px solid #d6d9e0;
           }
+          .hidden {
+              display: none !important;
+          }
+
+          .lds-facebook,
+          .lds-facebook div {
+              box-sizing: border-box;
+          }
+          .lds-facebook {
+              display: inline-block;
+              position: relative;
+              width: 80px;
+              height: 80px;
+              margin-left: calc(50% - 40px);
+              margin-top: 100px;
+          }
+          .lds-facebook div {
+              display: inline-block;
+              position: absolute;
+              left: 8px;
+              width: 16px;
+              background: currentColor;
+              animation: lds-facebook 1.2s cubic-bezier(0, 0.5, 0.5, 1) infinite;
+          }
+          .lds-facebook div:nth-child(1) {
+              left: 8px;
+              animation-delay: -0.24s;
+          }
+          .lds-facebook div:nth-child(2) {
+              left: 32px;
+              animation-delay: -0.12s;
+          }
+          .lds-facebook div:nth-child(3) {
+              left: 56px;
+              animation-delay: 0s;
+          }
+          @keyframes lds-facebook {
+              0% {
+                  top: 8px;
+                  height: 64px;
+              }
+              50%, 100% {
+                  top: 24px;
+                  height: 32px;
+              }
+          }
+
+
       </style>
   </head>
   <body>
@@ -25,81 +73,96 @@
                 <p class="subtitle">MF site traffic shit</p>
               </div>
           </div>
-          <div class="section border-bottom">
-              <nav class="level">
-                  <!-- Left side -->
-                  <form method="get">
-                  <div class="level-left">
-                      <div class="level-item">
-                          <div class="field is-horizontal">
-                              <div class="field-label is-normal">
-                                  <label class="label">From</label>
-                              </div>
-                              <div class="field-body">
-                                  <div class="field">
-                                      <p class="control">
-                                          <input class="input" name="start" id="start-date" type="date" value="{{ .StartDate }}" />
-                                      </p>
+
+          <div id="spinner" class="lds-facebook"><div></div><div></div><div></div></div>
+
+          <div id="hider" class="hidden">
+              <div class="section border-bottom ">
+                  <nav class="level">
+                      <!-- Left side -->
+                      <form method="get">
+                      <div class="level-left">
+                          <div class="level-item">
+                              <div class="field is-horizontal">
+                                  <div class="field-label is-normal">
+                                      <label class="label">From</label>
+                                  </div>
+                                  <div class="field-body">
+                                      <div class="field">
+                                          <p class="control">
+                                              <input class="input" name="start" id="start-date" type="date" value="{{ .StartDate }}" />
+                                          </p>
+                                      </div>
                                   </div>
                               </div>
                           </div>
-                      </div>
-                      <div class="level-item">
-                          <div class="field is-horizontal">
-                              <div class="field-label is-normal">
-                                  <label class="label">To</label>
-                              </div>
-                              <div class="field-body">
-                                  <div class="field">
-                                      <p class="control">
-                                          <input class="input" name="end" id="end-date" type="date" value="{{ .EndDate }}" max="{{ .EndDate }}" />
-                                      </p>
+                          <div class="level-item">
+                              <div class="field is-horizontal">
+                                  <div class="field-label is-normal">
+                                      <label class="label">To</label>
+                                  </div>
+                                  <div class="field-body">
+                                      <div class="field">
+                                          <p class="control">
+                                              <input class="input" name="end" id="end-date" type="date" value="{{ .EndDate }}" max="{{ .EndDate }}" />
+                                          </p>
+                                      </div>
                                   </div>
                               </div>
                           </div>
+                          <p class="level-item"><button type="submit" class="button is-link">View</button></p>
+                        </div>
+                      </form>
+                      <div class="field">
+                          <input id="switchColorDefault" type="checkbox" name="switchColorDefault" class="switch" >
+                          <label for="switchColorDefault">Hours/Days</label>
                       </div>
-                      <p class="level-item"><button type="submit" class="button is-link">View</button></p>
+                  </nav>
+              </div>
+                <div class="section">
+                  <nav class="level">
+                      <div class="level-item has-text-centered">
+                          <div>
+                              <p class="heading">Visitors</p>
+                              <p class="title" id="total-visitors"></p>
+                          </div>
+                      </div>
+                      <div class="level-item has-text-centered">
+                          <div>
+                              <p class="heading">Page views</p>
+                              <p class="title" id="total-page-views"></p>
+                          </div>
+                      </div>
+                      <div class="level-item has-text-centered">
+                          <div>
+                              <p class="heading">Current visitors</p>
+                              <p class="title" id="current-visitors"></p>
+                          </div>
+                      </div>
+                  </nav>
+              </div>
+              <div class="section">
+                  <div id="pageviews-per-hour"></div>
+              </div>
+              <div class="section">
+                  <div class="columns">
+                    <div class="column">
+                       <div id="requests-per-ip"></div>
                     </div>
-                  </form>
-                  <div class="field">
-                      <input id="switchColorDefault" type="checkbox" name="switchColorDefault" class="switch" >
-                      <label for="switchColorDefault">Hours/Days</label>
+                    <div class="column">
+                        <div id="visitors-per-country"></div>
+                    </div>
                   </div>
-              </nav>
-          </div>
-            <div class="section">
-              <nav class="level">
-                  <div class="level-item has-text-centered">
-                      <div>
-                          <p class="heading">Visitors</p>
-                          <p class="title" id="total-visitors"></p>
+              </div>
+              <div class="section">
+                  <div class="columns">
+                      <div class="column">
+                          <div id="referrers"></div>
+                      </div>
+                      <div class="column">
+                          <div id="visitors-per-utm-source"></div>
                       </div>
                   </div>
-                  <div class="level-item has-text-centered">
-                      <div>
-                          <p class="heading">Page views</p>
-                          <p class="title" id="total-page-views"></p>
-                      </div>
-                  </div>
-                  <div class="level-item has-text-centered">
-                      <div>
-                          <p class="heading">Current visitors</p>
-                          <p class="title" id="current-visitors"></p>
-                      </div>
-                  </div>
-              </nav>
-          </div>
-          <div class="section">
-              <div id="pageviews-per-hour"></div>
-          </div>
-          <div class="section">
-              <div class="columns">
-                <div class="column">
-                   <div id="requests-per-ip"></div>
-                </div>
-                <div class="column">
-                    <div id="visitors-per-country"></div>
-                </div>
               </div>
           </div>
       </div>
