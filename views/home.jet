@@ -114,8 +114,8 @@
                         </div>
                       </form>
                       <div class="field">
-                          <input id="switchColorDefault" type="checkbox" name="switchColorDefault" class="switch" >
-                          <label for="switchColorDefault">Hours/Days</label>
+                          <input id="hourSwitch" type="checkbox"  class="switch" >
+                          <label for="hourSwitch">Hours/Days</label>
                       </div>
                   </nav>
               </div>
@@ -142,7 +142,18 @@
                   </nav>
               </div>
               <div class="section">
-                  <div id="pageviews-per-hour"></div>
+                  <div class="tabs">
+                      <ul>
+                          <li id="pageview-tab" class="is-active"><a href="#pageviews">Page views</a></li>
+                          <li id="quicksync-tab"><a href="#quicksyncs">Quick syncs</a></li>
+                      </ul>
+                  </div>
+                  <div id="pageview-table">
+                    <div id="pageviews-per-hour"></div>
+                  </div>
+                  <div id="quicksync-table" class="hidden">
+                      <div id="quicksyncs-per-hour"></div>
+                  </div>
               </div>
               <div class="section">
                   <div class="columns">

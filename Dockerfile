@@ -8,7 +8,7 @@ RUN go mod download
 
 COPY *.go ./
 
-RUN go build -o /trackma
+RUN go build -ldflags "-s -w" -o /trackma
 
 FROM alpine:latest
 

@@ -18,7 +18,8 @@ type Statistic struct {
 	CurrentVisitors      int               `json:"current_visitors"`
 	TotalPageViews       int               `json:"total_page_views"`
 	TotalVisitors        int               `json:"total_visitors"`
-	EventsPerHour        *map[string]int32 `json:"events_per_hour"`
+	PageViewsPerHour     *map[string]int32 `json:"page_views_per_hour"`
+	QuickSyncsPerHour    *map[string]int32 `json:"quick_syncs_per_hour"`
 	VisitorsPerCountry   *map[string]int32 `json:"visitors_per_country"`
 	RequestsPerIp        *[]requestsPerIp  `json:"requests_per_ip"`
 	Referrers            *map[string]int32 `json:"referrers"`
@@ -344,10 +345,14 @@ func getRequests(db *sql.DB, domain string, start *time.Time, end *time.Time) (*
 	return &result, nil
 }
 
-func groupEventsPerHour(events *[]event) (*map[string]int32, error) {
+func groupEventsPerHour(events *[]event, eventName string) (*map[string]int32, error) {
 	eventsPerHour := make(map[string]int32)
 
 	for _, e := range *events {
+		if e.EventName != eventName {
+			continue
+		}
+
 		key := e.Timestamp.Format("2006-01-02 15")
 
 		val, ok := eventsPerHour[key]
@@ -532,14 +537,23 @@ func GetStats(domain string, start *time.Time, end *time.Time) (*Statistic, erro
 		return nil, err
 	}
 
-	// events per hour
-	eph, err := groupEventsPerHour(events)
+	// pageviews per hour
+	eph, err := groupEventsPerHour(events, "pageview")
 
 	if err != nil {
 		return nil, err
 	}
 
-	stats.EventsPerHour = eph
+	stats.PageViewsPerHour = eph
+
+	// quicksyncs
+	qph, err := groupEventsPerHour(events, "quicksync")
+
+	if err != nil {
+		return nil, err
+	}
+
+	stats.QuickSyncsPerHour = qph
 
 	// events per country
 	epi, err := groupVisitorByCountry(events)

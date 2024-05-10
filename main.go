@@ -114,20 +114,22 @@ func handleRequests() {
 		}
 
 		// insert into monthly traffic
-		var ips *interface {
-			driver.Valuer
-			sql.Scanner
-		} = nil
+		if request.EventName == "pageview" {
+			var ips *interface {
+				driver.Valuer
+				sql.Scanner
+			} = nil
 
-		if len(request.ClientIp) > 1 {
-			var x = pq.Array(request.ClientIp[1:])
-			ips = &x
-		}
-		_, err = db.Exec("insert into public.monthly_traffic (timestamp, domain, duration, user_agent, referrer, path, query_params, country, status_code, ip, ips) values (NOW(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
-			strings.ToLower(strings.TrimSpace(request.Domain)), intToNil(request.Duration), request.ClientUserAgent, emptyStrToNil(request.Referrer), request.Path, queryJson, country, request.StatusCode, request.ClientIp[0], ips)
+			if len(request.ClientIp) > 1 {
+				var x = pq.Array(request.ClientIp[1:])
+				ips = &x
+			}
+			_, err = db.Exec("insert into public.monthly_traffic (timestamp, domain, duration, user_agent, referrer, path, query_params, country, status_code, ip, ips) values (NOW(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
+				strings.ToLower(strings.TrimSpace(request.Domain)), intToNil(request.Duration), request.ClientUserAgent, emptyStrToNil(request.Referrer), request.Path, queryJson, country, request.StatusCode, request.ClientIp[0], ips)
 
-		if err != nil {
-			log.Errorf("Failed to insert traffic row: %s", err)
+			if err != nil {
+				log.Errorf("Failed to insert traffic row: %s", err)
+			}
 		}
 	}
 }

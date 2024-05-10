@@ -10,13 +10,84 @@ function getFlagEmoji(countryCode) {
 class Stats {
     constructor() {
         this.numberFormatter = new Intl.NumberFormat('sv-SE');
+        this.barChartHeight = '300px';
+        this.lineChartHeight = '400px';
         this.data = null;
+        this.groupPerHour = !document.getElementById('hourSwitch').checked;
+        console.log('constructor', this.groupPerHour);
 
         const url = new URL(document.location).searchParams;
         const d = luxon.DateTime.now();
         this.start = url.get('start') ?? d.minus({ days: 1}).toString().substring(0, 10);
         this.end = url.get('end') ?? d.toString().substring(0, 10);
-        this.barChartHeight = '300px';
+
+        this.quickSyncGraph = new ApexCharts(document.getElementById('quicksyncs-per-hour'), {
+            chart: {
+                id: 'quicksyncs-per-hour',
+                type: 'line',
+                height: this.lineChartHeight
+            },
+            title: {
+                text: 'Quick syncs per hour'
+            },
+            series: [{
+                name: 'Syncs',
+                data: []
+            }],
+            xaxis: {
+                categories: []
+            }
+        });
+
+        this.pageViewsGraph = new ApexCharts(document.getElementById('pageviews-per-hour'), {
+            chart: {
+                id: 'pageviews-per-hour',
+                type: 'line',
+                height: this.lineChartHeight
+            },
+            title: {
+                text: 'Page views per hour'
+            },
+            series: [{
+                name: 'Views',
+                data: []
+            }],
+            xaxis: {
+                categories: []
+            }
+        });
+
+        this.quickSyncGraph.render();
+        this.pageViewsGraph.render();
+
+        document.getElementById('hourSwitch').onchange = e => {
+            this.groupPerHour = !e.currentTarget.checked;
+            console.log('callback', this.groupPerHour);
+            this.updateRequestsPerHour();
+            this.updateQuickSyncsPerHour();
+        };
+
+        if (window.location.href.includes("#quicksyncs")) {
+            document.getElementById('quicksync-tab').classList.add('is-active');
+            document.getElementById('quicksync-table').classList.remove('hidden');
+            document.getElementById('pageview-tab').classList.remove('is-active');
+            document.getElementById('pageview-table').classList.add('hidden');
+        }
+
+        window.addEventListener('popstate', () => {
+            if (window.location.href.includes('#quicksyncs')) {
+                document.getElementById('quicksync-tab').classList.add('is-active');
+                document.getElementById('quicksync-table').classList.remove('hidden');
+                document.getElementById('pageview-tab').classList.remove('is-active');
+                document.getElementById('pageview-table').classList.add('hidden');
+
+            } else {
+                document.getElementById('quicksync-tab').classList.remove('is-active');
+                document.getElementById('quicksync-table').classList.add('hidden');
+                document.getElementById('pageview-tab').classList.add('is-active');
+                document.getElementById('pageview-table').classList.remove('hidden');
+            }
+        });
     }
 
     fetchStats = async () => {
@@ -35,31 +106,81 @@ class Stats {
     }
 
     updateRequestsPerHour = () => {
-        const hours = [];
+        const timePoints = [];
         const hits = [];
 
-        for (const [key, value] of Object.entries(this.data.events_per_hour)) {
-            hours.push(luxon.DateTime.fromFormat(key, 'yyyy-MM-dd HH', { zone: 'utc' }).toLocal().toFormat('HH'));
-            hits.push(value);
+        if (this.groupPerHour) {
+            for (const [key, value] of Object.entries(this.data.page_views_per_hour)) {
+                timePoints.push(luxon.DateTime.fromFormat(key, 'yyyy-MM-dd HH', {zone: 'utc'}).toLocal().toFormat('HH'));
+                hits.push(value);
+            }
+        } else {
+            const groups = {};
+
+            for (const key of Object.keys(this.data.page_views_per_hour)) {
+                const d = key.substring(0, 10);
+
+                if (groups[d] === undefined) {
+                    groups[d] = 0;
+                }
+
+                groups[d] += this.data.page_views_per_hour[key];
+            }
+
+            for (const [key, value] of Object.entries(groups)) {
+                timePoints.push(key);
+                hits.push(value);
+            }
         }
 
-        new ApexCharts(document.getElementById('pageviews-per-hour'), {
-            chart: {
-                id: 'mychart',
-                type: 'line',
-                height: '400px'
-            },
-            title: {
-                text: 'Page views per hour'
-            },
+        ApexCharts.exec('pageviews-per-hour', 'updateOptions', {
             series: [{
                 name: 'Views',
                 data: hits
             }],
             xaxis: {
-                categories: hours
+                categories: timePoints
             }
-        }).render();
+        });
+    }
+
+    updateQuickSyncsPerHour = () => {
+        const timePoints = [];
+        const hits = [];
+
+        if (this.groupPerHour) {
+            for (const [key, value] of Object.entries(this.data.quick_syncs_per_hour)) {
+                timePoints.push(luxon.DateTime.fromFormat(key, 'yyyy-MM-dd HH', {zone: 'utc'}).toLocal().toFormat('HH'));
+                hits.push(value);
+            }
+        } else {
+            const groups = {};
+
+            for (const key of Object.keys(this.data.quick_syncs_per_hour)) {
+                const d = key.substring(0, 10);
+
+                if (groups[d] === undefined) {
+                    groups[d] = 0;
+                }
+
+                groups[d] += this.data.quick_syncs_per_hour[key];
+            }
+
+            for (const [key, value] of Object.entries(groups)) {
+                timePoints.push(key);
+                hits.push(value);
+            }
+        }
+
+        ApexCharts.exec('quicksyncs-per-hour', 'updateOptions', {
+            series: [{
+                name: 'Syncs',
+                data: hits
+            }],
+            xaxis: {
+                categories: timePoints
+            }
+        });
     }
 
     updateRequestsPerIp = () => {
@@ -201,6 +322,7 @@ class Stats {
         document.getElementById("total-page-views").textContent = this.numberFormatter.format(this.data.total_page_views);
 
         this.updateRequestsPerHour();
+        this.updateQuickSyncsPerHour();
         this.updateRequestsPerIp();
         this.updateVisitorsPerCountry();
         this.updateReferrers();
