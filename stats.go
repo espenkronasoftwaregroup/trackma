@@ -109,7 +109,7 @@ func getTotalPageViews(db *sql.DB, domain string, start *time.Time, end *time.Ti
 }
 
 func getTotalVisitors(db *sql.DB, domain string, start *time.Time, end *time.Time) (int, error) {
-	var query = "SELECT COUNT(DISTINCT visitor_id) AS c FROM public.events WHERE domain = $1"
+	var query = "SELECT COUNT(DISTINCT visitor_id) AS c FROM public.events WHERE event_name = 'pageview' AND domain = $1"
 
 	if start != nil {
 		query = query + " AND timestamp::date >= $2"
@@ -155,7 +155,7 @@ func getTotalVisitors(db *sql.DB, domain string, start *time.Time, end *time.Tim
 }
 
 func getCurrentVisitors(db *sql.DB, domain string) (int, error) {
-	var query = "SELECT COUNT(DISTINCT visitor_id) AS c FROM public.events WHERE domain = $1 AND timestamp > $2"
+	var query = "SELECT COUNT(DISTINCT visitor_id) AS c FROM public.events WHERE event_name = 'pageview' AND domain = $1 AND timestamp > $2"
 
 	var start = time.Now().UTC().Add(time.Duration(-5) * time.Minute)
 	rows, err := db.Query(query, domain, start)

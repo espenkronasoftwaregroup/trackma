@@ -1,6 +1,10 @@
-FROM golang:1.22-alpine AS BuildStage
+FROM --platform=linux/amd64 golang:1.22-alpine AS BuildStage
 
 WORKDIR /
+
+ENV CGO_ENABLED 0
+ENV GOOS linux
+ENV GOARCH amd64
 
 COPY go.mod ./
 COPY go.sum ./
@@ -10,7 +14,7 @@ COPY *.go ./
 
 RUN go build -ldflags "-s -w" -o /trackma
 
-FROM alpine:latest
+FROM --platform=linux/amd64 alpine:latest
 
 WORKDIR /
 

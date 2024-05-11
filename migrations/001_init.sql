@@ -14,6 +14,9 @@ CREATE TABLE IF NOT EXISTS events
     status_code int not null
 );
 
+CREATE INDEX IF NOT EXISTS events_visitor_id_index
+    ON events (visitor_id);
+
 CREATE TABLE IF NOT EXISTS monthly_traffic
 (
     domain varchar not null,
