@@ -8,22 +8,25 @@ import (
 	log "github.com/sirupsen/logrus"
 	"net"
 	"net/url"
+	"strconv"
 	"time"
 )
 
 type Statistic struct {
-	Domain               string            `json:"domain"`
-	StartTime            *time.Time        `json:"start_time"`
-	EndTime              *time.Time        `json:"end_time"`
-	CurrentVisitors      int               `json:"current_visitors"`
-	TotalPageViews       int               `json:"total_page_views"`
-	TotalVisitors        int               `json:"total_visitors"`
-	PageViewsPerHour     *map[string]int32 `json:"page_views_per_hour"`
-	QuickSyncsPerHour    *map[string]int32 `json:"quick_syncs_per_hour"`
-	VisitorsPerCountry   *map[string]int32 `json:"visitors_per_country"`
-	RequestsPerIp        *[]requestsPerIp  `json:"requests_per_ip"`
-	Referrers            *map[string]int32 `json:"referrers"`
-	VisitorsPerUtmSource *map[string]int32 `json:"visitors_per_utm_source"`
+	Domain               string              `json:"domain"`
+	StartTime            *time.Time          `json:"start_time"`
+	EndTime              *time.Time          `json:"end_time"`
+	CurrentVisitors      int                 `json:"current_visitors"`
+	TotalPageViews       int                 `json:"total_page_views"`
+	TotalVisitors        int                 `json:"total_visitors"`
+	PageViewsPerHour     *map[string]int32   `json:"page_views_per_hour"`
+	QuickSyncsPerHour    *map[string]int32   `json:"quick_syncs_per_hour"`
+	VisitorsPerCountry   *map[string]int32   `json:"visitors_per_country"`
+	RequestsPerIp        *[]requestsPerIp    `json:"requests_per_ip"`
+	Referrers            *map[string]int32   `json:"referrers"`
+	VisitorsPerUtmSource *map[string]int32   `json:"visitors_per_utm_source"`
+	RevenuePerUtmSource  *map[string]float32 `json:"revenue_per_utm_source"`
+	RevenuePerReferrer   *map[string]float32 `json:"revenue_per_referrer"`
 }
 
 type event struct {
@@ -345,29 +348,6 @@ func getRequests(db *sql.DB, domain string, start *time.Time, end *time.Time) (*
 	return &result, nil
 }
 
-func groupEventsPerHour(events *[]event, eventName string) (*map[string]int32, error) {
-	eventsPerHour := make(map[string]int32)
-
-	for _, e := range *events {
-		if e.EventName != eventName {
-			continue
-		}
-
-		key := e.Timestamp.Format("2006-01-02 15")
-
-		val, ok := eventsPerHour[key]
-
-		if !ok {
-			val = 1
-			eventsPerHour[key] = val
-		} else {
-			eventsPerHour[key] = val + 1
-		}
-	}
-
-	return &eventsPerHour, nil
-}
-
 func stringInSlice(a string, list []string) bool {
 	for _, b := range list {
 		if b == a {
@@ -375,31 +355,6 @@ func stringInSlice(a string, list []string) bool {
 		}
 	}
 	return false
-}
-
-func groupVisitorByCountry(events *[]event) (*map[string]int32, error) {
-	eventsPerCountry := make(map[string]int32)
-	visitorIds := make([]string, 0)
-
-	for _, e := range *events {
-		if stringInSlice(e.VisitorId, visitorIds) {
-			continue
-		}
-
-		key := e.Country
-
-		_, ok := eventsPerCountry[key]
-
-		if !ok {
-			eventsPerCountry[key] = 1
-		} else {
-			eventsPerCountry[key] += 1
-		}
-
-		visitorIds = append(visitorIds, e.VisitorId)
-	}
-
-	return &eventsPerCountry, nil
 }
 
 func groupRequestsPerIp(requests *[]request) (*[]requestsPerIp, error) {
@@ -432,72 +387,36 @@ func groupRequestsPerIp(requests *[]request) (*[]requestsPerIp, error) {
 	return &result, nil
 }
 
-func groupEventsByReferrer(events *[]event, domain string) (*map[string]int32, error) {
-	eventsPerReferrer := make(map[string]int32)
+func getOriginalReferringDomain(db *sql.DB, visitorId string, domain string) (string, error) {
+	var query = "SELECT referrer FROM public.events WHERE visitor_id = $1 ORDER BY timestamp ASC LIMIT 1"
+	rows, err := db.Query(query, visitorId)
+	var result = ""
 
-	// todo: maybe also take visitor id into account here
-	for _, e := range *events {
-		var key string = ""
+	if err != nil {
+		log.WithFields(log.Fields{"error": fmt.Errorf("%w", err)}).Error("Failed to query for original referrer")
+		return result, err
+	}
 
-		if e.Referrer != nil && len(*e.Referrer) > 0 {
-			u, err := url.Parse(*e.Referrer)
-			if err != nil {
-				continue
+	var referrer sql.NullString
+	rows.Next()
+	err = rows.Scan(&referrer)
+
+	if err != nil {
+		log.WithFields(log.Fields{"error": fmt.Errorf("%w", err)}).Error("Failed to scan original referrer")
+		return result, err
+	}
+
+	if referrer.Valid {
+
+		u, err := url.Parse(referrer.String)
+		if err == nil {
+			if u.Host != domain && u.Host != "www."+domain {
+				result = u.Host
 			}
-
-			if u.Host == domain {
-				continue
-			}
-
-			key = u.Host
-		} else {
-			continue
-		}
-
-		val, ok := eventsPerReferrer[key]
-
-		if !ok {
-			val = 1
-			eventsPerReferrer[key] = val
-		} else {
-			eventsPerReferrer[key] = val + 1
 		}
 	}
 
-	return &eventsPerReferrer, nil
-}
-
-func visitorsByUtmSource(events *[]event) (*map[string]int32, error) {
-	visitorsByUtmSource := make(map[string]int32)
-	visitorIds := make([]string, 0)
-
-	for _, e := range *events {
-		if stringInSlice(e.VisitorId, visitorIds) {
-			continue
-		}
-
-		if e.QueryParams == nil {
-			continue
-		}
-
-		key, ok := (*e.QueryParams)["utm_source"].(string)
-
-		if !ok {
-			continue
-		}
-
-		_, ok = visitorsByUtmSource[key]
-
-		if !ok {
-			visitorsByUtmSource[key] = 1
-		} else {
-			visitorsByUtmSource[key] += 1
-		}
-
-		visitorIds = append(visitorIds, e.VisitorId)
-	}
-
-	return &visitorsByUtmSource, nil
+	return result, nil
 }
 
 func GetStats(domain string, start *time.Time, end *time.Time) (*Statistic, error) {
@@ -537,50 +456,144 @@ func GetStats(domain string, start *time.Time, end *time.Time) (*Statistic, erro
 		return nil, err
 	}
 
-	// pageviews per hour
-	eph, err := groupEventsPerHour(events, "pageview")
+	pageViewsPerHour := make(map[string]int32)
+	quickSyncsPerHour := make(map[string]int32)
+	visitorsPerCountry := make(map[string]int32)
+	pageViewsPerReferrer := make(map[string]int32)
+	visitorsPerUtmSource := make(map[string]int32)
+	revenuePerUtmSource := make(map[string]float32)
+	revenuePerReferrer := make(map[string]float32)
+	visitorIds := make([]string, 0)
+	utmSourceVisitors := make([]string, 0)
 
-	if err != nil {
-		return nil, err
+	for _, e := range *events {
+		if e.EventName == "pageview" {
+
+			// group pageviews
+			key := e.Timestamp.Format("2006-01-02 15")
+			_, ok := pageViewsPerHour[key]
+
+			if !ok {
+				pageViewsPerHour[key] = 1
+			} else {
+				pageViewsPerHour[key] += 1
+			}
+
+			// group visitors per country
+			if stringInSlice(e.VisitorId, visitorIds) {
+				continue
+			}
+
+			_, ok = visitorsPerCountry[e.Country]
+
+			if !ok {
+				visitorsPerCountry[e.Country] = 1
+			} else {
+				visitorsPerCountry[e.Country] += 1
+			}
+
+			visitorIds = append(visitorIds, e.VisitorId)
+
+			// group page views per referrer
+			var referrer = ""
+
+			if e.Referrer != nil && len(*e.Referrer) > 0 {
+				u, err := url.Parse(*e.Referrer)
+				if err != nil {
+					continue
+				}
+
+				if u.Host != domain {
+					referrer = u.Host
+				}
+			}
+
+			if len(referrer) > 0 {
+				_, ok = pageViewsPerReferrer[referrer]
+
+				if !ok {
+					pageViewsPerReferrer[referrer] = 1
+				} else {
+					pageViewsPerReferrer[referrer] += 1
+				}
+			}
+
+			// group page views per utm source
+			if !stringInSlice(e.VisitorId, utmSourceVisitors) && e.QueryParams != nil {
+				key, ok := (*e.QueryParams)["utm_source"].(string)
+
+				if ok {
+					_, ok = visitorsPerUtmSource[key]
+
+					if !ok {
+						visitorsPerUtmSource[key] = 1
+					} else {
+						visitorsPerUtmSource[key] += 1
+					}
+
+					utmSourceVisitors = append(visitorIds, e.VisitorId)
+				}
+			}
+
+			// revenue per utm source and referrer
+			if e.QueryParams != nil {
+				sale, ok := (*e.QueryParams)["sale_total"].(string)
+
+				if ok {
+					f, err := strconv.ParseFloat(sale, 32)
+
+					if err == nil {
+
+						source, ok := (*e.QueryParams)["utm_source"].(string)
+
+						if ok {
+
+							_, sok := revenuePerUtmSource[source]
+
+							if !sok {
+								revenuePerUtmSource[source] = 0
+							}
+
+							revenuePerUtmSource[source] += float32(f)
+						}
+
+						referrer, err := getOriginalReferringDomain(db, e.VisitorId, domain)
+
+						if err == nil {
+							if len(referrer) > 0 {
+								_, rok := revenuePerReferrer[referrer]
+
+								if !rok {
+									revenuePerReferrer[referrer] = 0
+								}
+
+								revenuePerReferrer[referrer] += float32(f)
+							}
+						}
+					}
+				}
+			}
+		} else if e.EventName == "quicksync" {
+			key := e.Timestamp.Format("2006-01-02 15")
+
+			val, ok := quickSyncsPerHour[key]
+
+			if !ok {
+				val = 1
+				quickSyncsPerHour[key] = val
+			} else {
+				quickSyncsPerHour[key] = val + 1
+			}
+		}
 	}
 
-	stats.PageViewsPerHour = eph
-
-	// quicksyncs
-	qph, err := groupEventsPerHour(events, "quicksync")
-
-	if err != nil {
-		return nil, err
-	}
-
-	stats.QuickSyncsPerHour = qph
-
-	// events per country
-	epi, err := groupVisitorByCountry(events)
-
-	if err != nil {
-		return nil, err
-	}
-
-	stats.VisitorsPerCountry = epi
-
-	// referrers
-	ebr, err := groupEventsByReferrer(events, domain)
-
-	if err != nil {
-		return nil, err
-	}
-
-	stats.Referrers = ebr
-
-	// utm sources
-	vbu, err := visitorsByUtmSource(events)
-
-	if err != nil {
-		return nil, err
-	}
-
-	stats.VisitorsPerUtmSource = vbu
+	stats.PageViewsPerHour = &pageViewsPerHour
+	stats.QuickSyncsPerHour = &quickSyncsPerHour
+	stats.VisitorsPerCountry = &visitorsPerCountry
+	stats.Referrers = &pageViewsPerReferrer
+	stats.VisitorsPerUtmSource = &visitorsPerUtmSource
+	stats.RevenuePerUtmSource = &revenuePerUtmSource
+	stats.RevenuePerReferrer = &revenuePerReferrer
 
 	// requests
 	req, err := getRequests(db, domain, start, end)

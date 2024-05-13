@@ -17,6 +17,9 @@ CREATE TABLE IF NOT EXISTS events
 CREATE INDEX IF NOT EXISTS events_visitor_id_index
     ON events (visitor_id);
 
+CREATE INDEX IF NOT EXISTS events_event_name_index
+    ON events (event_name);
+
 CREATE TABLE IF NOT EXISTS monthly_traffic
 (
     domain varchar not null,
