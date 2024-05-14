@@ -22,15 +22,15 @@ CREATE INDEX IF NOT EXISTS events_event_name_index
 
 CREATE TABLE IF NOT EXISTS monthly_traffic
 (
-    domain varchar not null,
-    duration bigint,
-    timestamp  timestamp not null,
-    user_agent varchar   not null,
-    referrer   varchar,
-    path       varchar   not null,
+    domain       varchar   not null,
+    duration     bigint,
+    timestamp    timestamp not null,
+    user_agent   varchar   not null,
+    referrer     varchar,
+    path         varchar   not null,
     query_params jsonb,
-    country varchar not null,
-    status_code int not null,
-    ip inet not null,
-    ips inet[]
+    country      varchar   not null,
+    status_code  int       not null,
+    ip           inet      not null,
+    ips          inet[]
 );

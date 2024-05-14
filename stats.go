@@ -9,6 +9,8 @@ import (
 	"math"
 	"net"
 	"net/url"
+	"slices"
+	"sort"
 	"strconv"
 	"time"
 )
@@ -20,17 +22,18 @@ type Statistic struct {
 	CurrentVisitors      int                 `json:"current_visitors"`
 	TotalPageViews       int                 `json:"total_page_views"`
 	TotalVisitors        int                 `json:"total_visitors"`
-	PageViewsPerHour     *map[string]int32   `json:"page_views_per_hour"`
-	QuickSyncsPerHour    *map[string]int32   `json:"quick_syncs_per_hour"`
-	VisitorsPerCountry   *map[string]int32   `json:"visitors_per_country"`
+	PageViewsPerHour     *map[string]*int32  `json:"page_views_per_hour"`
+	QuickSyncsPerHour    *map[string]*int32  `json:"quick_syncs_per_hour"`
+	VisitorsPerCountry   *map[string]*int32  `json:"visitors_per_country"`
 	RequestsPerIp        *[]requestsPerIp    `json:"requests_per_ip"`
-	Referrers            *map[string]int32   `json:"referrers"`
-	VisitorsPerUtmSource *map[string]int32   `json:"visitors_per_utm_source"`
+	Referrers            *map[string]*int32  `json:"referrers"`
+	VisitorsPerUtmSource *map[string]*int32  `json:"visitors_per_utm_source"`
 	RevenuePerUtmSource  *map[string]float32 `json:"revenue_per_utm_source"`
 	RevenuePerReferrer   *map[string]float32 `json:"revenue_per_referrer"`
 }
 
 type event struct {
+	//Id          int64
 	Domain      string
 	EventName   string
 	Duration    int64
@@ -103,6 +106,7 @@ func getTotalPageViews(db *sql.DB, domain string, start *time.Time, end *time.Ti
 
 	rows.Next()
 	err = rows.Scan(&result)
+	rows.Close()
 
 	if err != nil {
 		log.WithFields(log.Fields{"error": fmt.Errorf("%w", err)}).Error("Failed to scan page view rows")
@@ -149,6 +153,7 @@ func getTotalVisitors(db *sql.DB, domain string, start *time.Time, end *time.Tim
 
 	rows.Next()
 	err = rows.Scan(&result)
+	rows.Close()
 
 	if err != nil {
 		log.WithFields(log.Fields{"error": fmt.Errorf("%w", err)}).Error("Failed to scan rows")
@@ -173,6 +178,7 @@ func getCurrentVisitors(db *sql.DB, domain string) (int, error) {
 
 	rows.Next()
 	err = rows.Scan(&result)
+	rows.Close()
 
 	if err != nil {
 		log.WithFields(log.Fields{"error": fmt.Errorf("%w", err)}).Error("Failed to scan rows")
@@ -217,6 +223,7 @@ func countEvents(db *sql.DB, domain string, start *time.Time, end *time.Time) (i
 	var result = 0
 	rows.Next()
 	err = rows.Scan(&result)
+	rows.Close()
 
 	if err != nil {
 		return 0, err
@@ -227,41 +234,41 @@ func countEvents(db *sql.DB, domain string, start *time.Time, end *time.Time) (i
 
 func getAllEvents(db *sql.DB, c chan *event, domain string, start *time.Time, end *time.Time) {
 
-	var pageSize = 5000
+	var pageSize = 10000
 	eventCount, err := countEvents(db, domain, start, end)
 	var pageCount = math.Ceil(float64(eventCount) / float64(pageSize))
 	var lastStart time.Time
-
-	if start != nil {
-		lastStart = *start
-	}
 
 	if err != nil {
 		log.WithFields(log.Fields{"error": fmt.Errorf("%w", err)}).Error("Failed to count events")
 		close(c)
 	}
 
-	for i := 1; i <= int(pageCount); i++ {
+	for i := 0; i <= int(pageCount); i++ {
 		var query = "SELECT domain, event_name, duration, timestamp, user_agent, referrer, path, visitor_id, query_params, country, event_data, status_code FROM public.events WHERE domain = $1"
 
 		if !lastStart.IsZero() {
+			query = query + " AND timestamp >= $2"
+		} else if start != nil {
 			query = query + " AND timestamp::date >= $2"
 		}
 
 		if end != nil {
-			if !lastStart.IsZero() {
+			if !lastStart.IsZero() || start != nil {
 				query = query + " AND timestamp::date <= $3"
 			} else {
 				query = query + " AND timestamp::date <= $2"
 			}
 		}
 
-		query += " ORDER BY timestamp  LIMIT 5000" // it would be correct to use pageSize here but im lazy
+		query += " ORDER BY timestamp ASC LIMIT 10000" // it would be correct to use pageSize here but im lazy
 
 		var rows *sql.Rows
 
 		if !lastStart.IsZero() && end != nil {
 			rows, err = db.Query(query, domain, lastStart, end)
+		} else if start != nil && end != nil {
+			rows, err = db.Query(query, domain, start, end)
 		} else if !lastStart.IsZero() {
 			rows, err = db.Query(query, domain, lastStart)
 		} else if end != nil {
@@ -324,8 +331,10 @@ func getAllEvents(db *sql.DB, c chan *event, domain string, start *time.Time, en
 
 			c <- &e
 
-			lastStart = e.Timestamp // maybe we should not alter the pointer value here?
+			lastStart = e.Timestamp
 		}
+
+		rows.Close()
 	}
 
 	close(c)
@@ -406,16 +415,9 @@ func getRequests(db *sql.DB, domain string, start *time.Time, end *time.Time) (*
 		result = append(result, e)
 	}
 
-	return &result, nil
-}
+	rows.Close()
 
-func stringInSlice(a string, list []string) bool {
-	for _, b := range list {
-		if b == a {
-			return true
-		}
-	}
-	return false
+	return &result, nil
 }
 
 func groupRequestsPerIp(requests *[]request) (*[]requestsPerIp, error) {
@@ -439,10 +441,12 @@ func groupRequestsPerIp(requests *[]request) (*[]requestsPerIp, error) {
 		}
 	}
 
-	result := make([]requestsPerIp, 0)
+	result := make([]requestsPerIp, len(eventsPerPath))
+	count := 0
 
 	for _, v := range eventsPerPath {
-		result = append(result, *v)
+		result[count] = *v
+		count++
 	}
 
 	return &result, nil
@@ -461,6 +465,7 @@ func getOriginalReferringDomain(db *sql.DB, visitorId string, domain string) (st
 	var referrer sql.NullString
 	rows.Next()
 	err = rows.Scan(&referrer)
+	rows.Close()
 
 	if err != nil {
 		log.WithFields(log.Fields{"error": fmt.Errorf("%w", err)}).Error("Failed to scan original referrer")
@@ -480,15 +485,27 @@ func getOriginalReferringDomain(db *sql.DB, visitorId string, domain string) (st
 	return result, nil
 }
 
-func GetStats(domain string, start *time.Time, end *time.Time) (*Statistic, error) {
-	var readChannel = make(chan *event, 5000)
-
-	db, err := sql.Open("postgres", ConnStr)
-	if err != nil {
-		log.Fatal(err)
+func increment(counts map[string]*int32, key string) {
+	if p, ok := counts[key]; ok {
+		*p++
+		return
 	}
 
-	defer db.Close()
+	var n int32 = 1
+	counts[key] = &n
+}
+
+func insert(a []string, index int, value string) []string {
+	if len(a) == index { // nil or empty slice or after last element
+		return append(a, value)
+	}
+	a = append(a[:index+1], a[index:]...) // index < len(a)
+	a[index] = value
+	return a
+}
+
+func GetStats(db *sql.DB, domain string, start *time.Time, end *time.Time) (*Statistic, error) {
+	var readChannel = make(chan *event, 100000)
 
 	var stats Statistic
 	stats.Domain = domain
@@ -515,11 +532,11 @@ func GetStats(domain string, start *time.Time, end *time.Time) (*Statistic, erro
 
 	go getAllEvents(db, readChannel, domain, start, end)
 
-	pageViewsPerHour := make(map[string]int32)
-	quickSyncsPerHour := make(map[string]int32)
-	visitorsPerCountry := make(map[string]int32)
-	pageViewsPerReferrer := make(map[string]int32)
-	visitorsPerUtmSource := make(map[string]int32)
+	pageViewsPerHour := make(map[string]*int32)
+	quickSyncsPerHour := make(map[string]*int32)
+	visitorsPerCountry := make(map[string]*int32)
+	pageViewsPerReferrer := make(map[string]*int32)
+	visitorsPerUtmSource := make(map[string]*int32)
 	revenuePerUtmSource := make(map[string]float32)
 	revenuePerReferrer := make(map[string]float32)
 	visitorIds := make([]string, 0)
@@ -529,32 +546,18 @@ func GetStats(domain string, start *time.Time, end *time.Time) (*Statistic, erro
 		if e.EventName == "pageview" {
 
 			// group pageviews
-			key := e.Timestamp.Format("2006-01-02 15")
-			_, ok := pageViewsPerHour[key]
-
-			if !ok {
-				pageViewsPerHour[key] = 1
-			} else {
-				pageViewsPerHour[key] += 1
-			}
+			key := e.Timestamp.String()[:13]
+			increment(pageViewsPerHour, key)
 
 			// group visitors per country
-			if stringInSlice(e.VisitorId, visitorIds) {
-				continue
+			x := sort.SearchStrings(visitorIds, e.VisitorId)
+			if x == len(visitorIds) {
+				increment(visitorsPerCountry, e.Country)
+				insert(visitorIds, x, e.VisitorId)
 			}
-
-			_, ok = visitorsPerCountry[e.Country]
-
-			if !ok {
-				visitorsPerCountry[e.Country] = 1
-			} else {
-				visitorsPerCountry[e.Country] += 1
-			}
-
-			visitorIds = append(visitorIds, e.VisitorId)
 
 			// group page views per referrer
-			var referrer = ""
+			referrer := ""
 
 			if e.Referrer != nil && len(*e.Referrer) > 0 {
 				u, err := url.Parse(*e.Referrer)
@@ -568,29 +571,16 @@ func GetStats(domain string, start *time.Time, end *time.Time) (*Statistic, erro
 			}
 
 			if len(referrer) > 0 {
-				_, ok = pageViewsPerReferrer[referrer]
-
-				if !ok {
-					pageViewsPerReferrer[referrer] = 1
-				} else {
-					pageViewsPerReferrer[referrer] += 1
-				}
+				increment(pageViewsPerReferrer, referrer)
 			}
 
 			// group page views per utm source
-			if !stringInSlice(e.VisitorId, utmSourceVisitors) && e.QueryParams != nil {
+			if !slices.Contains(utmSourceVisitors, e.VisitorId) && e.QueryParams != nil {
 				key, ok := (*e.QueryParams)["utm_source"].(string)
 
 				if ok {
-					_, ok = visitorsPerUtmSource[key]
-
-					if !ok {
-						visitorsPerUtmSource[key] = 1
-					} else {
-						visitorsPerUtmSource[key] += 1
-					}
-
-					utmSourceVisitors = append(visitorIds, e.VisitorId)
+					increment(visitorsPerUtmSource, key)
+					utmSourceVisitors = append(utmSourceVisitors, e.VisitorId)
 				}
 			}
 
@@ -633,16 +623,8 @@ func GetStats(domain string, start *time.Time, end *time.Time) (*Statistic, erro
 				}
 			}
 		} else if e.EventName == "quicksync" {
-			key := e.Timestamp.Format("2006-01-02 15")
-
-			val, ok := quickSyncsPerHour[key]
-
-			if !ok {
-				val = 1
-				quickSyncsPerHour[key] = val
-			} else {
-				quickSyncsPerHour[key] = val + 1
-			}
+			key := e.Timestamp.String()[:13]
+			increment(quickSyncsPerHour, key)
 		}
 	}
 

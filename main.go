@@ -33,6 +33,7 @@ type IngestRequest struct {
 
 var pipeline = make(chan IngestRequest, 10000)
 var ConnStr = os.Getenv("CONNSTR")
+var db *sql.DB
 
 func emptyStrToNil(s string) *string {
 	if s == "" {
@@ -51,18 +52,13 @@ func intToNil(i int64) *int64 {
 
 func handleRequests() {
 
-	db, err := sql.Open("postgres", ConnStr)
+	writeDb, err := sql.Open("postgres", ConnStr)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	defer db.Close()
+	defer writeDb.Close()
 
-	err = MigrateDb(db)
-
-	if err != nil {
-		log.Fatal(err)
-	}
 	err = LoadIp2CountryDb(filepath.Join(Root, "dbip-country-lite.csv"))
 
 	if err != nil {
@@ -106,7 +102,7 @@ func handleRequests() {
 		}
 
 		// insert to events
-		_, err = db.Exec("insert into public.events (\"timestamp\", \"domain\", event_name, duration, user_agent, referrer, path, visitor_id, query_params, country, status_code) values (NOW(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10);",
+		_, err = writeDb.Exec("insert into public.events (\"timestamp\", \"domain\", event_name, duration, user_agent, referrer, path, visitor_id, query_params, country, status_code) values (NOW(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10);",
 			strings.ToLower(strings.TrimSpace(request.Domain)), request.EventName, intToNil(request.Duration), request.ClientUserAgent, emptyStrToNil(request.Referrer), request.Path, request.VisitorId, queryJson, country, request.StatusCode)
 
 		if err != nil {
@@ -124,7 +120,7 @@ func handleRequests() {
 				var x = pq.Array(request.ClientIp[1:])
 				ips = &x
 			}
-			_, err = db.Exec("insert into public.monthly_traffic (timestamp, domain, duration, user_agent, referrer, path, query_params, country, status_code, ip, ips) values (NOW(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
+			_, err = writeDb.Exec("insert into public.monthly_traffic (timestamp, domain, duration, user_agent, referrer, path, query_params, country, status_code, ip, ips) values (NOW(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
 				strings.ToLower(strings.TrimSpace(request.Domain)), intToNil(request.Duration), request.ClientUserAgent, emptyStrToNil(request.Referrer), request.Path, queryJson, country, request.StatusCode, request.ClientIp[0], ips)
 
 			if err != nil {
@@ -217,7 +213,7 @@ func handleStatsRequest(ctx iris.Context) {
 		}
 	}
 
-	stats, err := GetStats("kilohearts.com", start, end)
+	stats, err := GetStats(db, "kilohearts.com", start, end)
 
 	if err != nil {
 		ctx.StopWithError(500, err)
@@ -231,6 +227,21 @@ func main() {
 	log.SetLevel(log.DebugLevel)
 	app := iris.New()
 	app.Logger().SetLevel("debug")
+
+	d, err := sql.Open("postgres", ConnStr)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	defer d.Close()
+
+	err = MigrateDb(d)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	db = d
 
 	tmpl := iris.Jet("./views", ".jet").Reload(true)
 	app.RegisterView(tmpl)
