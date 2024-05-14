@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/lib/pq"
 	log "github.com/sirupsen/logrus"
+	"math"
 	"net"
 	"net/url"
 	"strconv"
@@ -181,8 +182,8 @@ func getCurrentVisitors(db *sql.DB, domain string) (int, error) {
 	return result, nil
 }
 
-func getAllEvents(db *sql.DB, domain string, start *time.Time, end *time.Time) (*[]event, error) {
-	var query = "SELECT domain, event_name, duration, timestamp, user_agent, referrer, path, visitor_id, query_params, country, event_data, status_code FROM public.events WHERE domain = $1"
+func countEvents(db *sql.DB, domain string, start *time.Time, end *time.Time) (int, error) {
+	var query = "SELECT COUNT(*) FROM public.events WHERE domain = $1"
 
 	if start != nil {
 		query = query + " AND timestamp::date >= $2"
@@ -195,8 +196,6 @@ func getAllEvents(db *sql.DB, domain string, start *time.Time, end *time.Time) (
 			query = query + " AND timestamp::date <= $2"
 		}
 	}
-
-	query += " ORDER BY timestamp"
 
 	var rows *sql.Rows
 	var err error
@@ -212,62 +211,124 @@ func getAllEvents(db *sql.DB, domain string, start *time.Time, end *time.Time) (
 	}
 
 	if err != nil {
-		log.WithFields(log.Fields{"error": fmt.Errorf("%w", err)}).Error("Failed to query for all events")
-		return nil, err
+		return 0, err
 	}
 
-	var result = make([]event, 0)
+	var result = 0
+	rows.Next()
+	err = rows.Scan(&result)
 
-	for rows.Next() {
-		var e event
-		var queryJson sql.NullString
-		var eventJson sql.NullString
-		var duration sql.NullInt64
+	if err != nil {
+		return 0, err
+	}
 
-		err := rows.Scan(&e.Domain, &e.EventName, &duration, &e.Timestamp, &e.UserAgent, &e.Referrer, &e.Path, &e.VisitorId, &queryJson, &e.Country, &eventJson, &e.StatusCode)
+	return result, nil
+}
+
+func getAllEvents(db *sql.DB, c chan *event, domain string, start *time.Time, end *time.Time) {
+
+	var pageSize = 5000
+	eventCount, err := countEvents(db, domain, start, end)
+	var pageCount = math.Ceil(float64(eventCount) / float64(pageSize))
+	var lastStart time.Time
+
+	if start != nil {
+		lastStart = *start
+	}
+
+	if err != nil {
+		log.WithFields(log.Fields{"error": fmt.Errorf("%w", err)}).Error("Failed to count events")
+		close(c)
+	}
+
+	for i := 1; i <= int(pageCount); i++ {
+		var query = "SELECT domain, event_name, duration, timestamp, user_agent, referrer, path, visitor_id, query_params, country, event_data, status_code FROM public.events WHERE domain = $1"
+
+		if !lastStart.IsZero() {
+			query = query + " AND timestamp::date >= $2"
+		}
+
+		if end != nil {
+			if !lastStart.IsZero() {
+				query = query + " AND timestamp::date <= $3"
+			} else {
+				query = query + " AND timestamp::date <= $2"
+			}
+		}
+
+		query += " ORDER BY timestamp  LIMIT 5000" // it would be correct to use pageSize here but im lazy
+
+		var rows *sql.Rows
+
+		if !lastStart.IsZero() && end != nil {
+			rows, err = db.Query(query, domain, lastStart, end)
+		} else if !lastStart.IsZero() {
+			rows, err = db.Query(query, domain, lastStart)
+		} else if end != nil {
+			rows, err = db.Query(query, domain, end)
+		} else {
+			rows, err = db.Query(query, domain)
+		}
 
 		if err != nil {
-			return nil, err
+			log.WithFields(log.Fields{"error": fmt.Errorf("%w", err)}).Error("Failed to query for all events")
+			close(c)
 		}
 
-		if duration.Valid {
-			e.Duration = duration.Int64
-		} else {
-			e.Duration = 0
-		}
+		for rows.Next() {
+			var e event
+			var queryJson sql.NullString
+			var eventJson sql.NullString
+			var duration sql.NullInt64
 
-		if //goland:noinspection GoDfaConstantCondition
-		queryJson.Valid {
-			q := make(map[string]interface{})
-
-			err := json.Unmarshal([]byte(queryJson.String), &q)
+			err := rows.Scan(&e.Domain, &e.EventName, &duration, &e.Timestamp, &e.UserAgent, &e.Referrer, &e.Path, &e.VisitorId, &queryJson, &e.Country, &eventJson, &e.StatusCode)
 
 			if err != nil {
-				log.WithFields(log.Fields{"error": fmt.Errorf("%w", err)}).Error("Failed to unmarshal query json")
-				return nil, err
+				log.WithFields(log.Fields{"error": fmt.Errorf("%w", err)}).Error("Failed to scan events")
+				close(c)
 			}
 
-			e.QueryParams = &q
-		}
-
-		if //goland:noinspection GoDfaConstantCondition
-		eventJson.Valid {
-			q := make(map[string]interface{})
-
-			err := json.Unmarshal([]byte(eventJson.String), &q)
-
-			if err != nil {
-				log.WithFields(log.Fields{"error": fmt.Errorf("%w", err)}).Error("Failed to unmarshal event json")
-				return nil, err
+			if duration.Valid {
+				e.Duration = duration.Int64
+			} else {
+				e.Duration = 0
 			}
 
-			e.EventData = &q
-		}
+			if //goland:noinspection GoDfaConstantCondition
+			queryJson.Valid {
+				q := make(map[string]interface{})
 
-		result = append(result, e)
+				err := json.Unmarshal([]byte(queryJson.String), &q)
+
+				if err != nil {
+					log.WithFields(log.Fields{"error": fmt.Errorf("%w", err)}).Error("Failed to unmarshal query json")
+					close(c)
+				}
+
+				e.QueryParams = &q
+			}
+
+			if //goland:noinspection GoDfaConstantCondition
+			eventJson.Valid {
+				q := make(map[string]interface{})
+
+				err := json.Unmarshal([]byte(eventJson.String), &q)
+
+				if err != nil {
+					log.WithFields(log.Fields{"error": fmt.Errorf("%w", err)}).Error("Failed to unmarshal event json")
+					close(c)
+				}
+
+				e.EventData = &q
+			}
+
+			c <- &e
+
+			lastStart = e.Timestamp // maybe we should not alter the pointer value here?
+		}
 	}
 
-	return &result, nil
+	close(c)
 }
 
 func getRequests(db *sql.DB, domain string, start *time.Time, end *time.Time) (*[]request, error) {
@@ -420,6 +481,8 @@ func getOriginalReferringDomain(db *sql.DB, visitorId string, domain string) (st
 }
 
 func GetStats(domain string, start *time.Time, end *time.Time) (*Statistic, error) {
+	var readChannel = make(chan *event, 5000)
+
 	db, err := sql.Open("postgres", ConnStr)
 	if err != nil {
 		log.Fatal(err)
@@ -450,11 +513,7 @@ func GetStats(domain string, start *time.Time, end *time.Time) (*Statistic, erro
 	}
 	stats.CurrentVisitors = currentVisitors
 
-	events, err := getAllEvents(db, domain, start, end)
-
-	if err != nil {
-		return nil, err
-	}
+	go getAllEvents(db, readChannel, domain, start, end)
 
 	pageViewsPerHour := make(map[string]int32)
 	quickSyncsPerHour := make(map[string]int32)
@@ -466,7 +525,7 @@ func GetStats(domain string, start *time.Time, end *time.Time) (*Statistic, erro
 	visitorIds := make([]string, 0)
 	utmSourceVisitors := make([]string, 0)
 
-	for _, e := range *events {
+	for e := range readChannel {
 		if e.EventName == "pageview" {
 
 			// group pageviews
