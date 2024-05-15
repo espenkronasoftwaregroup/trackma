@@ -9,7 +9,6 @@ import (
 	"math"
 	"net"
 	"net/url"
-	"slices"
 	"sort"
 	"strconv"
 	"time"
@@ -441,12 +440,29 @@ func groupRequestsPerIp(requests *[]request) (*[]requestsPerIp, error) {
 		}
 	}
 
-	result := make([]requestsPerIp, len(eventsPerPath))
-	count := 0
+	type kv struct {
+		Key   string
+		Value requestsPerIp
+	}
 
-	for _, v := range eventsPerPath {
-		result[count] = *v
+	values := make([]kv, len(eventsPerPath))
+
+	count := 0
+	for k, v := range eventsPerPath {
+		values[count] = kv{
+			k, *v,
+		}
 		count++
+	}
+
+	sort.Slice(values, func(i, j int) bool {
+		return values[i].Value.Count > values[j].Value.Count
+	})
+
+	result := make([]requestsPerIp, 10)
+
+	for i, v := range values[:10] {
+		result[i] = v.Value
 	}
 
 	return &result, nil
@@ -495,15 +511,6 @@ func increment(counts map[string]*int32, key string) {
 	counts[key] = &n
 }
 
-func insert(a []string, index int, value string) []string {
-	if len(a) == index { // nil or empty slice or after last element
-		return append(a, value)
-	}
-	a = append(a[:index+1], a[index:]...) // index < len(a)
-	a[index] = value
-	return a
-}
-
 func GetStats(db *sql.DB, domain string, start *time.Time, end *time.Time) (*Statistic, error) {
 	var readChannel = make(chan *event, 100000)
 
@@ -539,8 +546,8 @@ func GetStats(db *sql.DB, domain string, start *time.Time, end *time.Time) (*Sta
 	visitorsPerUtmSource := make(map[string]*int32)
 	revenuePerUtmSource := make(map[string]float32)
 	revenuePerReferrer := make(map[string]float32)
-	visitorIds := make([]string, 0)
-	utmSourceVisitors := make([]string, 0)
+	visitorIds := make(map[string]bool)
+	utmSourceVisitors := make(map[string]bool)
 
 	for e := range readChannel {
 		if e.EventName == "pageview" {
@@ -550,10 +557,10 @@ func GetStats(db *sql.DB, domain string, start *time.Time, end *time.Time) (*Sta
 			increment(pageViewsPerHour, key)
 
 			// group visitors per country
-			x := sort.SearchStrings(visitorIds, e.VisitorId)
-			if x == len(visitorIds) {
+			_, exists := visitorIds[e.VisitorId]
+			if !exists {
 				increment(visitorsPerCountry, e.Country)
-				insert(visitorIds, x, e.VisitorId)
+				visitorIds[e.VisitorId] = true
 			}
 
 			// group page views per referrer
@@ -575,12 +582,13 @@ func GetStats(db *sql.DB, domain string, start *time.Time, end *time.Time) (*Sta
 			}
 
 			// group page views per utm source
-			if !slices.Contains(utmSourceVisitors, e.VisitorId) && e.QueryParams != nil {
+			_, ok := utmSourceVisitors[e.VisitorId]
+			if !ok && e.QueryParams != nil {
 				key, ok := (*e.QueryParams)["utm_source"].(string)
 
 				if ok {
 					increment(visitorsPerUtmSource, key)
-					utmSourceVisitors = append(utmSourceVisitors, e.VisitorId)
+					utmSourceVisitors[e.VisitorId] = true
 				}
 			}
 
