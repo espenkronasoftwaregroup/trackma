@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS events
     referrer   varchar,
     path       varchar   not null,
     visitor_id   varchar not null,
+    session_id  varchar,
     query_params jsonb,
     country varchar not null,
     event_data jsonb,

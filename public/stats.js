@@ -14,12 +14,13 @@ class Stats {
         this.lineChartHeight = '400px';
         this.data = null;
         this.groupPerHour = !document.getElementById('hourSwitch').checked;
-        console.log('constructor', this.groupPerHour);
 
         const url = new URL(document.location).searchParams;
         const d = luxon.DateTime.now();
         this.start = url.get('start') ?? d.minus({ days: 1}).toString().substring(0, 10);
         this.end = url.get('end') ?? d.toString().substring(0, 10);
+        document.getElementById('start-date').value = this.start;
+        document.getElementById('end-date').value = this.end;
 
         this.quickSyncGraph = new ApexCharts(document.getElementById('quicksyncs-per-hour'), {
             chart: {
@@ -62,7 +63,6 @@ class Stats {
 
         document.getElementById('hourSwitch').onchange = e => {
             this.groupPerHour = !e.currentTarget.checked;
-            console.log('callback', this.groupPerHour);
             this.updateRequestsPerHour();
             this.updateQuickSyncsPerHour();
         };
@@ -97,11 +97,9 @@ class Stats {
             urlParams.set('end', this.end);
             const resp = await fetch('/stats?' + urlParams.toString());
             this.data = await resp.json();
-            console.log(this.data);
-
             this.updateData()
         } catch (err) {
-
+            console.error(err);
         }
     }
 
@@ -200,7 +198,12 @@ class Stats {
             chart: {
                 id: 'requests-per-ip',
                 type: 'bar',
-                height: this.barChartHeight
+                height: this.barChartHeight,
+                events: {
+                    click: (e, chartContext, config) => {
+                        console.log(config)
+                    }
+                }
             },
             plotOptions: {
                 bar: {

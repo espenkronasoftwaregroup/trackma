@@ -40,6 +40,7 @@ type event struct {
 	UserAgent   string
 	Referrer    *string
 	VisitorId   string
+	SessionId   string
 	Path        string
 	QueryParams *map[string]interface{}
 	Country     string
@@ -116,7 +117,7 @@ func getTotalPageViews(db *sql.DB, domain string, start *time.Time, end *time.Ti
 }
 
 func getTotalVisitors(db *sql.DB, domain string, start *time.Time, end *time.Time) (int, error) {
-	var query = "SELECT COUNT(DISTINCT visitor_id) AS c FROM public.events WHERE event_name = 'pageview' AND domain = $1"
+	var query = "SELECT COUNT(DISTINCT session_id) AS c FROM public.events WHERE event_name = 'pageview' AND session_id IS NOT NULL AND domain = $1"
 
 	if start != nil {
 		query = query + " AND timestamp::date >= $2"
@@ -163,7 +164,7 @@ func getTotalVisitors(db *sql.DB, domain string, start *time.Time, end *time.Tim
 }
 
 func getCurrentVisitors(db *sql.DB, domain string) (int, error) {
-	var query = "SELECT COUNT(DISTINCT visitor_id) AS c FROM public.events WHERE event_name = 'pageview' AND domain = $1 AND timestamp > $2"
+	var query = "SELECT COUNT(DISTINCT session_id) AS c FROM public.events WHERE event_name = 'pageview' AND session_id IS NOT NULL AND domain = $1 AND timestamp > $2"
 
 	var start = time.Now().UTC().Add(time.Duration(-5) * time.Minute)
 	rows, err := db.Query(query, domain, start)
@@ -244,7 +245,7 @@ func getAllEvents(db *sql.DB, c chan *event, domain string, start *time.Time, en
 	}
 
 	for i := 0; i <= int(pageCount); i++ {
-		var query = "SELECT domain, event_name, duration, timestamp, user_agent, referrer, path, visitor_id, query_params, country, event_data, status_code FROM public.events WHERE domain = $1"
+		var query = "SELECT domain, event_name, duration, timestamp, user_agent, referrer, path, session_id, visitor_id, query_params, country, event_data, status_code FROM public.events WHERE domain = $1"
 
 		if !lastStart.IsZero() {
 			query = query + " AND timestamp >= $2"
@@ -285,9 +286,10 @@ func getAllEvents(db *sql.DB, c chan *event, domain string, start *time.Time, en
 			var e event
 			var queryJson sql.NullString
 			var eventJson sql.NullString
+			var sessionId sql.NullString
 			var duration sql.NullInt64
 
-			err := rows.Scan(&e.Domain, &e.EventName, &duration, &e.Timestamp, &e.UserAgent, &e.Referrer, &e.Path, &e.VisitorId, &queryJson, &e.Country, &eventJson, &e.StatusCode)
+			err := rows.Scan(&e.Domain, &e.EventName, &duration, &e.Timestamp, &e.UserAgent, &e.Referrer, &e.Path, &sessionId, &e.VisitorId, &queryJson, &e.Country, &eventJson, &e.StatusCode)
 
 			if err != nil {
 				log.WithFields(log.Fields{"error": fmt.Errorf("%w", err)}).Error("Failed to scan events")
@@ -298,6 +300,10 @@ func getAllEvents(db *sql.DB, c chan *event, domain string, start *time.Time, en
 				e.Duration = duration.Int64
 			} else {
 				e.Duration = 0
+			}
+
+			if sessionId.Valid {
+				e.SessionId = sessionId.String
 			}
 
 			if //goland:noinspection GoDfaConstantCondition

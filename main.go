@@ -23,7 +23,7 @@ type IngestRequest struct {
 	Path            string   `json:"path"`
 	Query           string   `json:"query"`
 	EventName       string   `json:"eventName"`
-	VisitorId       string   `json:"visitorId"`
+	SessionId       string   `json:"sessionId"`
 	Referrer        string   `json:"referrer"`
 	ClientIp        []string `json:"clientIp"`
 	ClientUserAgent string   `json:"clientUserAgent"`
@@ -95,15 +95,13 @@ func handleRequests() {
 
 		country := GetCountry(request.ClientIp[0])
 
-		if len(request.VisitorId) == 0 {
-			h := sha256.New()
-			h.Write([]byte(request.ClientIp[0] + request.ClientUserAgent))
-			request.VisitorId = base64.StdEncoding.EncodeToString(h.Sum(nil))
-		}
+		h := sha256.New()
+		h.Write([]byte(request.ClientIp[0] + request.ClientUserAgent))
+		visitorId := base64.StdEncoding.EncodeToString(h.Sum(nil))
 
 		// insert to events
-		_, err = writeDb.Exec("insert into public.events (\"timestamp\", \"domain\", event_name, duration, user_agent, referrer, path, visitor_id, query_params, country, status_code) values (NOW(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10);",
-			strings.ToLower(strings.TrimSpace(request.Domain)), request.EventName, intToNil(request.Duration), request.ClientUserAgent, emptyStrToNil(request.Referrer), request.Path, request.VisitorId, queryJson, country, request.StatusCode)
+		_, err = writeDb.Exec("insert into public.events (\"timestamp\", \"domain\", event_name, duration, user_agent, referrer, path, visitor_id, session_id, query_params, country, status_code) values (NOW(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11);",
+			strings.ToLower(strings.TrimSpace(request.Domain)), request.EventName, intToNil(request.Duration), request.ClientUserAgent, emptyStrToNil(request.Referrer), request.Path, visitorId, emptyStrToNil(request.SessionId), queryJson, country, request.StatusCode)
 
 		if err != nil {
 			log.Errorf("Failed to insert event row: %s", err)
