@@ -99,7 +99,7 @@ func getTotalPageViews(db *sql.DB, domain string, start *time.Time, end *time.Ti
 
 	if err != nil {
 		log.WithFields(log.Fields{"error": fmt.Errorf("%w", err)}).Error("Failed to query for total page views")
-		return 0, err
+		return -1, err
 	}
 
 	var result int = 0
@@ -110,7 +110,7 @@ func getTotalPageViews(db *sql.DB, domain string, start *time.Time, end *time.Ti
 
 	if err != nil {
 		log.WithFields(log.Fields{"error": fmt.Errorf("%w", err)}).Error("Failed to scan page view rows")
-		return 0, err
+		return -1, err
 	}
 
 	return result, nil
@@ -465,9 +465,15 @@ func groupRequestsPerIp(requests *[]request) (*[]requestsPerIp, error) {
 		return values[i].Value.Count > values[j].Value.Count
 	})
 
-	result := make([]requestsPerIp, 10)
+	requestCount := 10
 
-	for i, v := range values[:10] {
+	if len(values) < requestCount {
+		requestCount = len(values)
+	}
+
+	result := make([]requestsPerIp, requestCount)
+
+	for i, v := range values[:requestCount] {
 		result[i] = v.Value
 	}
 
@@ -525,11 +531,11 @@ func GetStats(db *sql.DB, domain string, start *time.Time, end *time.Time) (*Sta
 	stats.StartTime = start
 	stats.EndTime = end
 
-	visits, err := getTotalPageViews(db, domain, start, end)
+	tpv, err := getTotalPageViews(db, domain, start, end)
 	if err != nil {
 		return nil, err
 	}
-	stats.TotalPageViews = visits
+	stats.TotalPageViews = tpv
 
 	visitors, err := getTotalVisitors(db, domain, start, end)
 	if err != nil {
