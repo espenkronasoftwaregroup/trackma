@@ -233,11 +233,7 @@ func main() {
 
 	defer d.Close()
 
-	err = MigrateDb(d)
-
-	if err != nil {
-		log.Fatal(err)
-	}
+	MigrateDb(d)
 
 	db = d
 
