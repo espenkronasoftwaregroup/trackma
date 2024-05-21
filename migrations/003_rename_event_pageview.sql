@@ -1,0 +1,1 @@
+UPDATE events SET event_name = 'page_view' WHERE event_name = 'pageview';
