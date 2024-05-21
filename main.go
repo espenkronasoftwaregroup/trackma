@@ -29,6 +29,7 @@ type IngestRequest struct {
 	ClientUserAgent string   `json:"clientUserAgent"`
 	Duration        int64    `json:"duration"`
 	StatusCode      int16    `json:"statusCode"`
+	EventData       string   `json:"eventData"`
 }
 
 var pipeline = make(chan IngestRequest, 10000)
@@ -93,6 +94,15 @@ func handleRequests() {
 			queryJson = &qj
 		}
 
+		var edJson *[]byte
+
+		if len(request.EventData) > 0 {
+			bytes := []byte(request.EventData)
+			if json.Valid(bytes) {
+				edJson = &bytes
+			}
+		}
+
 		country := GetCountry(request.ClientIp[0])
 
 		h := sha256.New()
@@ -100,8 +110,8 @@ func handleRequests() {
 		visitorId := base64.StdEncoding.EncodeToString(h.Sum(nil))
 
 		// insert to events
-		_, err = writeDb.Exec("insert into public.events (\"timestamp\", \"domain\", event_name, duration, user_agent, referrer, path, visitor_id, session_id, query_params, country, status_code) values (NOW(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11);",
-			strings.ToLower(strings.TrimSpace(request.Domain)), request.EventName, intToNil(request.Duration), request.ClientUserAgent, emptyStrToNil(request.Referrer), request.Path, visitorId, emptyStrToNil(request.SessionId), queryJson, country, request.StatusCode)
+		_, err = writeDb.Exec("insert into public.events (\"timestamp\", \"domain\", event_name, duration, user_agent, referrer, path, visitor_id, session_id, query_params, country, status_code, event_data) values (NOW(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12);",
+			strings.ToLower(strings.TrimSpace(request.Domain)), request.EventName, intToNil(request.Duration), request.ClientUserAgent, emptyStrToNil(request.Referrer), request.Path, visitorId, emptyStrToNil(request.SessionId), queryJson, country, request.StatusCode, edJson)
 
 		if err != nil {
 			log.Errorf("Failed to insert event row: %s", err)
@@ -152,7 +162,7 @@ func handleIngest(ctx iris.Context) {
 		return
 	}
 
-	if ingestBody.Path == "" {
+	if ingestBody.EventName == "pageview" && ingestBody.Path == "" {
 		ctx.StopWithError(iris.StatusBadRequest, fmt.Errorf("path is required"))
 		return
 	}
