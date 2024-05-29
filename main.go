@@ -118,7 +118,7 @@ func handleRequests() {
 		}
 
 		// insert into monthly traffic
-		if request.EventName == "pageview" {
+		if request.EventName == "page_view" {
 			var ips *interface {
 				driver.Valuer
 				sql.Scanner
@@ -162,7 +162,7 @@ func handleIngest(ctx iris.Context) {
 		return
 	}
 
-	if ingestBody.EventName == "pageview" && ingestBody.Path == "" {
+	if ingestBody.EventName == "page_view" && ingestBody.Path == "" {
 		ctx.StopWithError(iris.StatusBadRequest, fmt.Errorf("path is required"))
 		return
 	}

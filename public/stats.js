@@ -29,7 +29,7 @@ class Stats {
                 height: this.lineChartHeight
             },
             title: {
-                text: 'Quick syncs per hour'
+                text: 'Quick syncs per time'
             },
             series: [{
                 name: 'Syncs',
@@ -47,7 +47,7 @@ class Stats {
                 height: this.lineChartHeight
             },
             title: {
-                text: 'Page views per hour'
+                text: 'Page views per time'
             },
             series: [{
                 name: 'Views',
@@ -58,36 +58,73 @@ class Stats {
             }
         });
 
+        this.accountCreationGraph = new ApexCharts(document.getElementById('account-creations-per-hour'), {
+            chart: {
+                id: 'account-creations',
+                type: 'line',
+                height: this.lineChartHeight
+            },
+            title: {
+                text: 'Account creations per time'
+            },
+            series: [{
+                name: 'Creations',
+                data: []
+            }],
+            xaxis: {
+                categories: []
+            }
+        });
+
+        this.trialsStartedGraph = new ApexCharts(document.getElementById('trials-started-per-hour'), {
+            chart: {
+                id: 'trials-started',
+                type: 'line',
+                height: this.lineChartHeight
+            },
+            title: {
+                text: 'Trials started per time'
+            },
+            series: [{
+                name: 'Trials',
+                data: []
+            }],
+            xaxis: {
+                categories: []
+            }
+        });
+
         this.quickSyncGraph.render();
         this.pageViewsGraph.render();
+        this.accountCreationGraph.render();
+        this.trialsStartedGraph.render();
 
         document.getElementById('hourSwitch').onchange = e => {
             this.groupPerHour = !e.currentTarget.checked;
             this.updateRequestsPerHour();
             this.updateQuickSyncsPerHour();
+            this.updateAccountCreations();
+            this.updateTrialsStarted();
         };
 
-        if (window.location.href.includes("#quicksyncs")) {
-            document.getElementById('quicksync-tab').classList.add('is-active');
-            document.getElementById('quicksync-table').classList.remove('hidden');
-            document.getElementById('pageview-tab').classList.remove('is-active');
-            document.getElementById('pageview-table').classList.add('hidden');
+        if (window.location.href.includes('#')) {
+            this.setActiveTab();
         }
 
-        window.addEventListener('popstate', () => {
-            if (window.location.href.includes('#quicksyncs')) {
-                document.getElementById('quicksync-tab').classList.add('is-active');
-                document.getElementById('quicksync-table').classList.remove('hidden');
-                document.getElementById('pageview-tab').classList.remove('is-active');
-                document.getElementById('pageview-table').classList.add('hidden');
+        window.addEventListener('popstate', this.setActiveTab);
+    }
 
+    setActiveTab = () => {
+        const anchor = window.location.hash.substring(1);
+        for (const element of document.querySelectorAll('div.tabs ul li')) {
+            if (element.id === anchor) {
+                element.classList.add('is-active');
+                document.getElementById(element.getAttribute('data-table-element')).classList.remove('hidden');
             } else {
-                document.getElementById('quicksync-tab').classList.remove('is-active');
-                document.getElementById('quicksync-table').classList.add('hidden');
-                document.getElementById('pageview-tab').classList.add('is-active');
-                document.getElementById('pageview-table').classList.remove('hidden');
+                element.classList.remove('is-active');
+                document.getElementById(element.getAttribute('data-table-element')).classList.add('hidden');
             }
-        });
+        }
     }
 
     fetchStats = async () => {
@@ -147,21 +184,21 @@ class Stats {
         const hits = [];
 
         if (this.groupPerHour) {
-            for (const [key, value] of Object.entries(this.data.quick_syncs_per_hour)) {
+            for (const [key, value] of Object.entries(this.data.events_per_name_and_hour.quick_sync)) {
                 timePoints.push(luxon.DateTime.fromFormat(key, 'yyyy-MM-dd HH', {zone: 'utc'}).toLocal().toFormat('HH'));
                 hits.push(value);
             }
         } else {
             const groups = {};
 
-            for (const key of Object.keys(this.data.quick_syncs_per_hour)) {
+            for (const key of Object.keys(this.data.events_per_name_and_hour.quick_sync)) {
                 const d = key.substring(0, 10);
 
                 if (groups[d] === undefined) {
                     groups[d] = 0;
                 }
 
-                groups[d] += this.data.quick_syncs_per_hour[key];
+                groups[d] += this.data.events_per_name_and_hour.quick_sync[key];
             }
 
             for (const [key, value] of Object.entries(groups)) {
@@ -173,6 +210,84 @@ class Stats {
         ApexCharts.exec('quicksyncs-per-hour', 'updateOptions', {
             series: [{
                 name: 'Syncs',
+                data: hits
+            }],
+            xaxis: {
+                categories: timePoints
+            }
+        });
+    }
+
+    updateAccountCreations = () => {
+        const timePoints = [];
+        const hits = [];
+
+        if (this.groupPerHour) {
+            for (const [key, value] of Object.entries(this.data.events_per_name_and_hour.account_created)) {
+                timePoints.push(luxon.DateTime.fromFormat(key, 'yyyy-MM-dd HH', {zone: 'utc'}).toLocal().toFormat('HH'));
+                hits.push(value);
+            }
+        } else {
+            const groups = {};
+
+            for (const key of Object.keys(this.data.events_per_name_and_hour.account_created)) {
+                const d = key.substring(0, 10);
+
+                if (groups[d] === undefined) {
+                    groups[d] = 0;
+                }
+
+                groups[d] += this.data.events_per_name_and_hour.account_created[key];
+            }
+
+            for (const [key, value] of Object.entries(groups)) {
+                timePoints.push(key);
+                hits.push(value);
+            }
+        }
+
+        ApexCharts.exec('account-creations', 'updateOptions', {
+            series: [{
+                name: 'Creations',
+                data: hits
+            }],
+            xaxis: {
+                categories: timePoints
+            }
+        });
+    }
+
+    updateTrialsStarted = () => {
+        const timePoints = [];
+        const hits = [];
+
+        if (this.groupPerHour) {
+            for (const [key, value] of Object.entries(this.data.events_per_name_and_hour.trial_started)) {
+                timePoints.push(luxon.DateTime.fromFormat(key, 'yyyy-MM-dd HH', {zone: 'utc'}).toLocal().toFormat('HH'));
+                hits.push(value);
+            }
+        } else {
+            const groups = {};
+
+            for (const key of Object.keys(this.data.events_per_name_and_hour.trial_started)) {
+                const d = key.substring(0, 10);
+
+                if (groups[d] === undefined) {
+                    groups[d] = 0;
+                }
+
+                groups[d] += this.data.events_per_name_and_hour.trial_started[key];
+            }
+
+            for (const [key, value] of Object.entries(groups)) {
+                timePoints.push(key);
+                hits.push(value);
+            }
+        }
+
+        ApexCharts.exec('trials-started', 'updateOptions', {
+            series: [{
+                name: 'Trials',
                 data: hits
             }],
             xaxis: {
@@ -326,6 +441,8 @@ class Stats {
 
         this.updateRequestsPerHour();
         this.updateQuickSyncsPerHour();
+        this.updateAccountCreations();
+        this.updateTrialsStarted();
         this.updateRequestsPerIp();
         this.updateVisitorsPerCountry();
         this.updateReferrers();

@@ -15,20 +15,20 @@ import (
 )
 
 type Statistic struct {
-	Domain               string              `json:"domain"`
-	StartTime            *time.Time          `json:"start_time"`
-	EndTime              *time.Time          `json:"end_time"`
-	CurrentVisitors      int                 `json:"current_visitors"`
-	TotalPageViews       int                 `json:"total_page_views"`
-	TotalVisitors        int                 `json:"total_visitors"`
-	PageViewsPerHour     *map[string]*int32  `json:"page_views_per_hour"`
-	QuickSyncsPerHour    *map[string]*int32  `json:"quick_syncs_per_hour"`
-	VisitorsPerCountry   *map[string]*int32  `json:"visitors_per_country"`
-	RequestsPerIp        *[]requestsPerIp    `json:"requests_per_ip"`
-	Referrers            *map[string]*int32  `json:"referrers"`
-	VisitorsPerUtmSource *map[string]*int32  `json:"visitors_per_utm_source"`
-	RevenuePerUtmSource  *map[string]float32 `json:"revenue_per_utm_source"`
-	RevenuePerReferrer   *map[string]float32 `json:"revenue_per_referrer"`
+	Domain               string                         `json:"domain"`
+	StartTime            *time.Time                     `json:"start_time"`
+	EndTime              *time.Time                     `json:"end_time"`
+	CurrentVisitors      int                            `json:"current_visitors"`
+	TotalPageViews       int                            `json:"total_page_views"`
+	TotalVisitors        int                            `json:"total_visitors"`
+	PageViewsPerHour     *map[string]*int32             `json:"page_views_per_hour"`
+	EventsPerNameAndHour *map[string]*map[string]*int32 `json:"events_per_name_and_hour"`
+	VisitorsPerCountry   *map[string]*int32             `json:"visitors_per_country"`
+	RequestsPerIp        *[]requestsPerIp               `json:"requests_per_ip"`
+	Referrers            *map[string]*int32             `json:"referrers"`
+	VisitorsPerUtmSource *map[string]*int32             `json:"visitors_per_utm_source"`
+	RevenuePerUtmSource  *map[string]float32            `json:"revenue_per_utm_source"`
+	RevenuePerReferrer   *map[string]float32            `json:"revenue_per_referrer"`
 }
 
 type event struct {
@@ -552,7 +552,7 @@ func GetStats(db *sql.DB, domain string, start *time.Time, end *time.Time) (*Sta
 	go getAllEvents(db, readChannel, domain, start, end)
 
 	pageViewsPerHour := make(map[string]*int32)
-	quickSyncsPerHour := make(map[string]*int32)
+	eventsPerNameAndHour := make(map[string]*map[string]*int32)
 	visitorsPerCountry := make(map[string]*int32)
 	pageViewsPerReferrer := make(map[string]*int32)
 	visitorsPerUtmSource := make(map[string]*int32)
@@ -564,7 +564,7 @@ func GetStats(db *sql.DB, domain string, start *time.Time, end *time.Time) (*Sta
 	for e := range readChannel {
 		if e.EventName == "page_view" {
 
-			// group pageviews
+			// group page views
 			key := e.Timestamp.String()[:13]
 			increment(pageViewsPerHour, key)
 
@@ -642,14 +642,22 @@ func GetStats(db *sql.DB, domain string, start *time.Time, end *time.Time) (*Sta
 					}
 				}
 			}
-		} else if e.EventName == "quicksync" {
+		} else {
+			p, ok := eventsPerNameAndHour[e.EventName]
+
+			if !ok {
+				var x = make(map[string]*int32)
+				p = &x
+				eventsPerNameAndHour[e.EventName] = p
+			}
+
 			key := e.Timestamp.String()[:13]
-			increment(quickSyncsPerHour, key)
+			increment(*p, key)
 		}
 	}
 
 	stats.PageViewsPerHour = &pageViewsPerHour
-	stats.QuickSyncsPerHour = &quickSyncsPerHour
+	stats.EventsPerNameAndHour = &eventsPerNameAndHour
 	stats.VisitorsPerCountry = &visitorsPerCountry
 	stats.Referrers = &pageViewsPerReferrer
 	stats.VisitorsPerUtmSource = &visitorsPerUtmSource
