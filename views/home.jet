@@ -72,6 +72,15 @@
                 margin-top: 25px;
             }
         }
+
+        .art {
+            width: 100px;
+            height: 100px;
+            position: absolute;
+            top: -150px;
+            left: 400px;
+        }
+
       </style>
   </head>
   <body>
@@ -80,6 +89,10 @@
               <div class="hero-body">
                 <p class="title">Trackma</p>
                 <p class="subtitle">MF site traffic shit</p>
+                  <div class="art">
+                  <object style="scale: 0.25" data="/public/art.svg" type="image/svg+xml">
+                  </object>
+                  </div>
               </div>
           </div>
 
