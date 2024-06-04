@@ -62,7 +62,16 @@
               }
           }
 
+        .numbers {
+            display: flex;
+            flex-flow: row wrap;
+            justify-content: center;
 
+            div {
+                flex: 0 1 33%;
+                margin-top: 25px;
+            }
+        }
       </style>
   </head>
   <body>
@@ -119,27 +128,43 @@
                       </div>
                   </nav>
               </div>
-                <div class="section">
-                  <nav class="level">
-                      <div class="level-item has-text-centered">
+                <div class="section numbers">
+                      <div class="has-text-centered">
                           <div>
                               <p class="heading">Visitors</p>
                               <p class="title" id="total-visitors"></p>
                           </div>
                       </div>
-                      <div class="level-item has-text-centered">
+                      <div class="has-text-centered">
                           <div>
                               <p class="heading">Page views</p>
                               <p class="title" id="total-page-views"></p>
                           </div>
                       </div>
-                      <div class="level-item has-text-centered">
+                      <div class="has-text-centered">
                           <div>
                               <p class="heading">Current visitors</p>
                               <p class="title" id="current-visitors"></p>
                           </div>
                       </div>
-                  </nav>
+                        <div class="has-text-centered">
+                            <div>
+                                <p class="heading">Orders completed</p>
+                                <p class="title" id="orders-completed"></p>
+                            </div>
+                        </div>
+                        <div class="has-text-centered">
+                            <div>
+                                <p class="heading">Subscriptions started</p>
+                                <p class="title" id="subscriptions-started"></p>
+                            </div>
+                        </div>
+                        <div class="has-text-centered">
+                            <div>
+                                <p class="heading">Trials started</p>
+                                <p class="title" id="trials-started"></p>
+                            </div>
+                        </div>
               </div>
               <div class="section">
                   <div class="tabs">
@@ -147,7 +172,6 @@
                           <li id="pageviews" data-table-element="pageview-table" class="is-active"><a href="#pageviews">Page views</a></li>
                           <li id="quicksyncs" data-table-element="quicksync-table"><a href="#quicksyncs">Quick syncs</a></li>
                           <li id="account-creations" data-table-element="account-table"><a href="#account-creations">Account creations</a></li>
-                          <li id="trials-started" data-table-element="trials-table"><a href="#trials-started">Trials started</a></li>
                       </ul>
                   </div>
                   <div id="pageview-table">
@@ -158,9 +182,6 @@
                   </div>
                   <div id="account-table" class="hidden">
                       <div id="account-creations-per-hour"></div>
-                  </div>
-                  <div id="trials-table" class="hidden">
-                      <div id="trials-started-per-hour"></div>
                   </div>
               </div>
               <div class="section">

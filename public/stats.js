@@ -76,35 +76,15 @@ class Stats {
             }
         });
 
-        this.trialsStartedGraph = new ApexCharts(document.getElementById('trials-started-per-hour'), {
-            chart: {
-                id: 'trials-started',
-                type: 'line',
-                height: this.lineChartHeight
-            },
-            title: {
-                text: 'Trials started per time'
-            },
-            series: [{
-                name: 'Trials',
-                data: []
-            }],
-            xaxis: {
-                categories: []
-            }
-        });
-
         this.quickSyncGraph.render();
         this.pageViewsGraph.render();
         this.accountCreationGraph.render();
-        this.trialsStartedGraph.render();
 
         document.getElementById('hourSwitch').onchange = e => {
             this.groupPerHour = !e.currentTarget.checked;
             this.updateRequestsPerHour();
             this.updateQuickSyncsPerHour();
             this.updateAccountCreations();
-            this.updateTrialsStarted();
         };
 
         if (window.location.href.includes('#')) {
@@ -257,45 +237,6 @@ class Stats {
         });
     }
 
-    updateTrialsStarted = () => {
-        const timePoints = [];
-        const hits = [];
-
-        if (this.groupPerHour) {
-            for (const [key, value] of Object.entries(this.data.events_per_name_and_hour.trial_started)) {
-                timePoints.push(luxon.DateTime.fromFormat(key, 'yyyy-MM-dd HH', {zone: 'utc'}).toLocal().toFormat('HH'));
-                hits.push(value);
-            }
-        } else {
-            const groups = {};
-
-            for (const key of Object.keys(this.data.events_per_name_and_hour.trial_started)) {
-                const d = key.substring(0, 10);
-
-                if (groups[d] === undefined) {
-                    groups[d] = 0;
-                }
-
-                groups[d] += this.data.events_per_name_and_hour.trial_started[key];
-            }
-
-            for (const [key, value] of Object.entries(groups)) {
-                timePoints.push(key);
-                hits.push(value);
-            }
-        }
-
-        ApexCharts.exec('trials-started', 'updateOptions', {
-            series: [{
-                name: 'Trials',
-                data: hits
-            }],
-            xaxis: {
-                categories: timePoints
-            }
-        });
-    }
-
     updateRequestsPerIp = () => {
         let sortable = [...this.data.requests_per_ip];
         sortable.sort((a, b) => b.count - a.count);
@@ -438,11 +379,13 @@ class Stats {
         document.getElementById("total-visitors").textContent = this.numberFormatter.format(this.data.total_visitors);
         document.getElementById("current-visitors").textContent = this.numberFormatter.format(this.data.current_visitors);
         document.getElementById("total-page-views").textContent = this.numberFormatter.format(this.data.total_page_views);
+        document.getElementById('subscriptions-started').textContent = this.numberFormatter.format(this.data.subscriptions_started);
+        document.getElementById('orders-completed').textContent = this.numberFormatter.format(this.data.orders_completed);
+        document.getElementById('trials-started').textContent = this.numberFormatter.format(this.data.trials_started);
 
         this.updateRequestsPerHour();
         this.updateQuickSyncsPerHour();
         this.updateAccountCreations();
-        this.updateTrialsStarted();
         this.updateRequestsPerIp();
         this.updateVisitorsPerCountry();
         this.updateReferrers();

@@ -29,6 +29,9 @@ type Statistic struct {
 	VisitorsPerUtmSource *map[string]*int32             `json:"visitors_per_utm_source"`
 	RevenuePerUtmSource  *map[string]float32            `json:"revenue_per_utm_source"`
 	RevenuePerReferrer   *map[string]float32            `json:"revenue_per_referrer"`
+	SubscriptionsStarted int                            `json:"subscriptions_started"`
+	OrdersCompleted      int                            `json:"orders_completed"`
+	TrialsStarted        int                            `json:"trials_started"`
 }
 
 type event struct {
@@ -560,6 +563,9 @@ func GetStats(db *sql.DB, domain string, start *time.Time, end *time.Time) (*Sta
 	revenuePerReferrer := make(map[string]float32)
 	visitorIds := make(map[string]bool)
 	utmSourceVisitors := make(map[string]bool)
+	var ordersCompleted = 0
+	var subscriptionsStarted = 0
+	var trialsStarted = 0
 
 	for e := range readChannel {
 		if e.EventName == "page_view" {
@@ -654,6 +660,14 @@ func GetStats(db *sql.DB, domain string, start *time.Time, end *time.Time) (*Sta
 			key := e.Timestamp.String()[:13]
 			increment(*p, key)
 		}
+
+		if e.EventName == "sale" {
+			ordersCompleted += 1
+		} else if e.EventName == "subscription_started" {
+			subscriptionsStarted += 1
+		} else if e.EventName == "trial_started" {
+			trialsStarted += 1
+		}
 	}
 
 	stats.PageViewsPerHour = &pageViewsPerHour
@@ -663,6 +677,9 @@ func GetStats(db *sql.DB, domain string, start *time.Time, end *time.Time) (*Sta
 	stats.VisitorsPerUtmSource = &visitorsPerUtmSource
 	stats.RevenuePerUtmSource = &revenuePerUtmSource
 	stats.RevenuePerReferrer = &revenuePerReferrer
+	stats.OrdersCompleted = ordersCompleted
+	stats.SubscriptionsStarted = subscriptionsStarted
+	stats.TrialsStarted = trialsStarted
 
 	// requests
 	req, err := getRequests(db, domain, start, end)
