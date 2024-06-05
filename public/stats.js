@@ -160,6 +160,8 @@ class Stats {
     }
 
     updateQuickSyncsPerHour = () => {
+        if (!this.data.events_per_name_and_hour?.quick_sync) return;
+
         const timePoints = [];
         const hits = [];
 
@@ -199,6 +201,8 @@ class Stats {
     }
 
     updateAccountCreations = () => {
+        if (!this.data.events_per_name_and_hour?.account_created) return;
+
         const timePoints = [];
         const hits = [];
 
@@ -377,11 +381,11 @@ class Stats {
 
     updateData = () => {
         document.getElementById("total-visitors").textContent = this.numberFormatter.format(this.data.total_visitors);
-        document.getElementById("current-visitors").textContent = this.numberFormatter.format(this.data.current_visitors);
         document.getElementById("total-page-views").textContent = this.numberFormatter.format(this.data.total_page_views);
         document.getElementById('subscriptions-started').textContent = this.numberFormatter.format(this.data.subscriptions_started);
         document.getElementById('orders-completed').textContent = this.numberFormatter.format(this.data.orders_completed);
         document.getElementById('trials-started').textContent = this.numberFormatter.format(this.data.trials_started);
+        document.getElementById('accounts-created').textContent = this.numberFormatter.format(this.data.accounts_created);
 
         this.updateRequestsPerHour();
         this.updateQuickSyncsPerHour();

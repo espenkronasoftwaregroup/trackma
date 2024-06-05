@@ -156,8 +156,8 @@
                       </div>
                       <div class="has-text-centered">
                           <div>
-                              <p class="heading">Current visitors</p>
-                              <p class="title" id="current-visitors"></p>
+                              <p class="heading">Accounts created</p>
+                              <p class="title" id="accounts-created"></p>
                           </div>
                       </div>
                         <div class="has-text-centered">

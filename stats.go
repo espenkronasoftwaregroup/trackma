@@ -18,7 +18,6 @@ type Statistic struct {
 	Domain               string                         `json:"domain"`
 	StartTime            *time.Time                     `json:"start_time"`
 	EndTime              *time.Time                     `json:"end_time"`
-	CurrentVisitors      int                            `json:"current_visitors"`
 	TotalPageViews       int                            `json:"total_page_views"`
 	TotalVisitors        int                            `json:"total_visitors"`
 	PageViewsPerHour     *map[string]*int32             `json:"page_views_per_hour"`
@@ -32,6 +31,7 @@ type Statistic struct {
 	SubscriptionsStarted int                            `json:"subscriptions_started"`
 	OrdersCompleted      int                            `json:"orders_completed"`
 	TrialsStarted        int                            `json:"trials_started"`
+	AccountsCreated      int                            `json:"accounts_created"`
 }
 
 type event struct {
@@ -149,31 +149,6 @@ func getTotalVisitors(db *sql.DB, domain string, start *time.Time, end *time.Tim
 
 	if err != nil {
 		log.WithFields(log.Fields{"error": fmt.Errorf("%w", err)}).Error("Failed to query for visitors")
-		return 0, err
-	}
-
-	var result int = 0
-
-	rows.Next()
-	err = rows.Scan(&result)
-	rows.Close()
-
-	if err != nil {
-		log.WithFields(log.Fields{"error": fmt.Errorf("%w", err)}).Error("Failed to scan rows")
-		return 0, err
-	}
-
-	return result, nil
-}
-
-func getCurrentVisitors(db *sql.DB, domain string) (int, error) {
-	var query = "SELECT COUNT(DISTINCT visitor_id) AS c FROM public.events WHERE event_name = 'page_view' AND domain = $1 AND timestamp > $2"
-
-	var start = time.Now().UTC().Add(time.Duration(-5) * time.Minute)
-	rows, err := db.Query(query, domain, start)
-
-	if err != nil {
-		log.WithFields(log.Fields{"error": fmt.Errorf("%w", err)}).Error("Failed to query for current visitors")
 		return 0, err
 	}
 
@@ -546,12 +521,6 @@ func GetStats(db *sql.DB, domain string, start *time.Time, end *time.Time) (*Sta
 	}
 	stats.TotalVisitors = visitors
 
-	currentVisitors, err := getCurrentVisitors(db, domain)
-	if err != nil {
-		return nil, err
-	}
-	stats.CurrentVisitors = currentVisitors
-
 	go getAllEvents(db, readChannel, domain, start, end)
 
 	pageViewsPerHour := make(map[string]*int32)
@@ -566,6 +535,7 @@ func GetStats(db *sql.DB, domain string, start *time.Time, end *time.Time) (*Sta
 	var ordersCompleted = 0
 	var subscriptionsStarted = 0
 	var trialsStarted = 0
+	var accountsCreated = 0
 
 	for e := range readChannel {
 		if e.EventName == "page_view" {
@@ -667,6 +637,8 @@ func GetStats(db *sql.DB, domain string, start *time.Time, end *time.Time) (*Sta
 			subscriptionsStarted += 1
 		} else if e.EventName == "trial_started" {
 			trialsStarted += 1
+		} else if e.EventName == "account_created" {
+			accountsCreated += 1
 		}
 	}
 
@@ -680,6 +652,7 @@ func GetStats(db *sql.DB, domain string, start *time.Time, end *time.Time) (*Sta
 	stats.OrdersCompleted = ordersCompleted
 	stats.SubscriptionsStarted = subscriptionsStarted
 	stats.TrialsStarted = trialsStarted
+	stats.AccountsCreated = accountsCreated
 
 	// requests
 	req, err := getRequests(db, domain, start, end)
