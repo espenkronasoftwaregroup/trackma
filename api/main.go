@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/kataras/iris/v12"
+	"github.com/kataras/iris/v12/middleware/cors"
 	"github.com/lib/pq"
 	_ "github.com/lib/pq"
 	log "github.com/sirupsen/logrus"
@@ -247,16 +248,10 @@ func main() {
 
 	db = d
 
-	tmpl := iris.Jet("./views", ".jet").Reload(true)
-	app.RegisterView(tmpl)
+	app.Use(cors.New().AllowOrigin("*").Handler())
+
 	app.HandleDir("/public", iris.Dir("./public"))
 	app.Post("/ingest", handleIngest)
-	app.Get("/", func(ctx iris.Context) {
-		renderView(ctx, "home", iris.Map{
-			"StartDate": time.Now().Add(time.Hour * -24).Format("2006-01-02"),
-			"EndDate":   time.Now().Format("2006-01-02"),
-		})
-	})
 	app.Get("/stats", handleStatsRequest)
 
 	go handleRequests()
