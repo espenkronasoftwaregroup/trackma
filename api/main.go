@@ -249,8 +249,6 @@ func main() {
 	db = d
 
 	app.Use(cors.New().AllowOrigin("*").Handler())
-
-	app.HandleDir("/public", iris.Dir("./public"))
 	app.Post("/ingest", handleIngest)
 	app.Get("/stats", handleStatsRequest)
 

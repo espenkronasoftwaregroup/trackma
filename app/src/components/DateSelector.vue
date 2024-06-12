@@ -1,8 +1,8 @@
 <script setup>
 import { ref } from 'vue';
 
-const props = defineProps(['modelValue', 'label']);
-const emit = defineEmits(['update:date']);
+const props = defineProps(['label']);
+const model = defineModel();
 
 </script>
 
@@ -14,7 +14,7 @@ const emit = defineEmits(['update:date']);
         <div class="field-body">
             <div class="field">
                 <p class="control">
-                    <input class="input" type="date" :value="props.date" @input="emit('update:date', $event.target.value)" />
+                    <input class="input" type="date" v-model="model" />
                 </p>
             </div>
         </div>

@@ -11,9 +11,12 @@
     "format": "prettier --write src/"
   },
   "dependencies": {
+    "apexcharts": "^3.49.1",
+    "luxon": "^3.4.4",
     "pinia": "^2.1.7",
     "vue": "^3.4.21",
-    "vue-router": "^4.3.0"
+    "vue-router": "^4.3.0",
+    "vue3-apexcharts": "^1.5.3"
   },
   "devDependencies": {
     "@rushstack/eslint-patch": "^1.8.0",
